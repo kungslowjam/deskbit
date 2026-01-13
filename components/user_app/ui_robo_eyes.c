@@ -45,9 +45,16 @@
 #define LAUGH_EYE_WIDTH 100
 #define LAUGH_EYE_OFFSET_Y -30
 #define MOUTH_WIDTH 200
-#define MOUTH_HEIGHT 100
+#define MOUTH_HEIGHT_MIN 60
+#define MOUTH_HEIGHT_MAX 110
 #define MOUTH_OFFSET_Y 60
 #define MOUTH_RADIUS LV_RADIUS_CIRCLE
+
+// Laugh Animation Config
+#define LAUGH_CYCLE_MS 300
+#define SQUINT_AMPLITUDE 6
+#define BOUNCE_AMPLITUDE 8
+#define MOUTH_BOUNCE_AMPLITUDE 20
 
 // Objects
 static lv_obj_t *scr_eyes = NULL;
@@ -79,6 +86,9 @@ static int breath_phase = 0;
 static int16_t gaze_x = 0;
 static int16_t gaze_y = 0;
 static int laugh_shake_phase = 0;
+static int laugh_cycle = 0;
+static int laugh_intensity = 0; // 0-100, builds up during laugh
+static int16_t current_mouth_height = MOUTH_HEIGHT_MIN;
 
 // Styles
 static lv_style_t style_eye;
@@ -101,15 +111,60 @@ static void update_positions(void) {
 
   int16_t breath = (int16_t)(3.0f * sinf(breath_phase * 0.01745f));
 
-  // Laugh shake effect - faster oscillation
+  // Laugh animation - organic bouncy movement
   int16_t shake_x = 0;
   int16_t shake_y = 0;
+  int16_t squint_offset = 0;
+  int16_t mouth_bounce = 0;
+
   if (current_emotion == EMO_LAUGH) {
-    laugh_shake_phase += 25; // Fast shake
+    // Build up laugh intensity gradually
+    if (laugh_intensity < 100)
+      laugh_intensity += 4;
+
+    // Multi-frequency shake for organic feel
+    laugh_shake_phase += 18;
     if (laugh_shake_phase >= 360)
       laugh_shake_phase = 0;
-    shake_x = (int16_t)(3.0f * sinf(laugh_shake_phase * 0.01745f));
-    shake_y = (int16_t)(4.0f * sinf(laugh_shake_phase * 2.0f * 0.01745f));
+
+    float intensity_scale = laugh_intensity / 100.0f;
+    float phase_rad = laugh_shake_phase * 0.01745f;
+
+    // Primary shake + secondary wobble
+    shake_x = (int16_t)(intensity_scale * (3.0f * sinf(phase_rad * 1.3f) +
+                                           1.5f * sinf(phase_rad * 2.7f)));
+    shake_y =
+        (int16_t)(intensity_scale * (BOUNCE_AMPLITUDE * fabsf(sinf(phase_rad)) +
+                                     2.0f * sinf(phase_rad * 1.5f)));
+
+    // Squint effect - eyes get tighter during laugh peaks
+    squint_offset =
+        (int16_t)(intensity_scale * SQUINT_AMPLITUDE * fabsf(sinf(phase_rad)));
+
+    // Mouth bouncing open and closed
+    laugh_cycle++;
+    float mouth_phase = (laugh_cycle * 0.15f);
+    float mouth_factor = 0.5f + 0.5f * sinf(mouth_phase);
+    current_mouth_height =
+        MOUTH_HEIGHT_MIN +
+        (int16_t)(intensity_scale * (MOUTH_HEIGHT_MAX - MOUTH_HEIGHT_MIN) *
+                  mouth_factor);
+    mouth_bounce = (int16_t)(intensity_scale * MOUTH_BOUNCE_AMPLITUDE *
+                             (1.0f - mouth_factor));
+
+    // Update mouth size dynamically
+    if (mouth_cont) {
+      lv_obj_set_height(mouth_cont, current_mouth_height);
+      if (mouth_circle) {
+        lv_obj_set_size(mouth_circle, MOUTH_WIDTH, current_mouth_height * 2);
+        lv_obj_align(mouth_circle, LV_ALIGN_TOP_MID, 0, -current_mouth_height);
+      }
+    }
+  } else {
+    // Reset for next laugh
+    laugh_intensity = 0;
+    laugh_cycle = 0;
+    current_mouth_height = MOUTH_HEIGHT_MIN;
   }
 
   if (left_eye && right_eye) {
@@ -118,17 +173,20 @@ static void update_positions(void) {
     lv_obj_align(right_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
                  breath + gaze_y);
   }
+
   if (left_laugh_eye && right_laugh_eye && current_emotion == EMO_LAUGH) {
+    // Eyes get squintier with intensity
     lv_obj_align(left_laugh_eye, LV_ALIGN_CENTER,
-                 -EYE_OFFSET_X + gaze_x + shake_x,
+                 -EYE_OFFSET_X + gaze_x + shake_x - squint_offset,
                  LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
     lv_obj_align(right_laugh_eye, LV_ALIGN_CENTER,
-                 EYE_OFFSET_X + gaze_x + shake_x,
+                 EYE_OFFSET_X + gaze_x + shake_x + squint_offset,
                  LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
   }
+
   if (mouth_cont && current_emotion == EMO_LAUGH) {
     lv_obj_align(mouth_cont, LV_ALIGN_CENTER, gaze_x + shake_x,
-                 MOUTH_OFFSET_Y + shake_y + gaze_y);
+                 MOUTH_OFFSET_Y + shake_y - mouth_bounce + gaze_y);
   }
 }
 
@@ -288,30 +346,111 @@ static void hide_sad(void) {
   }
 }
 
+// Animation callbacks for laugh transition
+static void anim_mouth_height_cb(void *var, int32_t v) {
+  if (mouth_cont) {
+    lv_obj_set_height(mouth_cont, v);
+    if (mouth_circle) {
+      lv_obj_set_size(mouth_circle, MOUTH_WIDTH, v * 2);
+      lv_obj_align(mouth_circle, LV_ALIGN_TOP_MID, 0, -v);
+    }
+  }
+}
+
+static void anim_laugh_eye_scale_cb(void *var, int32_t v) {
+  // Scale the line style width to create squint effect
+  if (left_laugh_eye)
+    lv_obj_set_style_line_width(left_laugh_eye, v, 0);
+  if (right_laugh_eye)
+    lv_obj_set_style_line_width(right_laugh_eye, v, 0);
+}
+
 static void show_laugh(void) {
+  // Reset laugh state
+  laugh_intensity = 0;
+  laugh_cycle = 0;
+  laugh_shake_phase = 0;
+  current_mouth_height = MOUTH_HEIGHT_MIN;
+
+  // Hide normal eyes
   if (left_eye)
     lv_obj_add_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
   if (right_eye)
     lv_obj_add_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
-  if (left_laugh_eye)
+
+  // Show laugh eyes with animation
+  if (left_laugh_eye) {
+    lv_obj_set_style_line_width(left_laugh_eye, 4, 0); // Start thin
     lv_obj_clear_flag(left_laugh_eye, LV_OBJ_FLAG_HIDDEN);
-  if (right_laugh_eye)
+  }
+  if (right_laugh_eye) {
+    lv_obj_set_style_line_width(right_laugh_eye, 4, 0);
     lv_obj_clear_flag(right_laugh_eye, LV_OBJ_FLAG_HIDDEN);
-  if (mouth_cont)
+  }
+
+  // Animate eyes getting thicker (squint effect)
+  lv_anim_t eye_anim;
+  lv_anim_init(&eye_anim);
+  lv_anim_set_var(&eye_anim, NULL);
+  lv_anim_set_values(&eye_anim, 4, 14);
+  lv_anim_set_time(&eye_anim, 200);
+  lv_anim_set_exec_cb(&eye_anim, anim_laugh_eye_scale_cb);
+  lv_anim_set_path_cb(&eye_anim, lv_anim_path_overshoot);
+  lv_anim_start(&eye_anim);
+
+  // Show and animate mouth opening
+  if (mouth_cont) {
+    lv_obj_set_height(mouth_cont, 10); // Start small
     lv_obj_clear_flag(mouth_cont, LV_OBJ_FLAG_HIDDEN);
+
+    lv_anim_t mouth_anim;
+    lv_anim_init(&mouth_anim);
+    lv_anim_set_var(&mouth_anim, NULL);
+    lv_anim_set_values(&mouth_anim, 10, MOUTH_HEIGHT_MIN);
+    lv_anim_set_time(&mouth_anim, 300);
+    lv_anim_set_exec_cb(&mouth_anim, anim_mouth_height_cb);
+    lv_anim_set_path_cb(&mouth_anim, lv_anim_path_overshoot);
+    lv_anim_start(&mouth_anim);
+  }
 }
 
-static void hide_laugh(void) {
+static void laugh_exit_anim_done(lv_anim_t *a) {
+  // Hide laugh elements after animation
   if (left_laugh_eye)
     lv_obj_add_flag(left_laugh_eye, LV_OBJ_FLAG_HIDDEN);
   if (right_laugh_eye)
     lv_obj_add_flag(right_laugh_eye, LV_OBJ_FLAG_HIDDEN);
   if (mouth_cont)
     lv_obj_add_flag(mouth_cont, LV_OBJ_FLAG_HIDDEN);
+
+  // Show normal eyes
   if (left_eye)
     lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
   if (right_eye)
     lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void hide_laugh(void) {
+  // Animate mouth closing
+  lv_anim_t mouth_anim;
+  lv_anim_init(&mouth_anim);
+  lv_anim_set_var(&mouth_anim, NULL);
+  lv_anim_set_values(&mouth_anim, current_mouth_height, 5);
+  lv_anim_set_time(&mouth_anim, 200);
+  lv_anim_set_exec_cb(&mouth_anim, anim_mouth_height_cb);
+  lv_anim_set_path_cb(&mouth_anim, lv_anim_path_ease_in);
+  lv_anim_set_ready_cb(&mouth_anim, laugh_exit_anim_done);
+  lv_anim_start(&mouth_anim);
+
+  // Animate eyes getting thinner
+  lv_anim_t eye_anim;
+  lv_anim_init(&eye_anim);
+  lv_anim_set_var(&eye_anim, NULL);
+  lv_anim_set_values(&eye_anim, 14, 4);
+  lv_anim_set_time(&eye_anim, 200);
+  lv_anim_set_exec_cb(&eye_anim, anim_laugh_eye_scale_cb);
+  lv_anim_set_path_cb(&eye_anim, lv_anim_path_ease_in);
+  lv_anim_start(&eye_anim);
 }
 
 static void gesture_event_cb(lv_event_t *e) {
@@ -468,7 +607,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_add_flag(right_laugh_eye, LV_OBJ_FLAG_HIDDEN);
 
   mouth_cont = lv_obj_create(scr_eyes);
-  lv_obj_set_size(mouth_cont, MOUTH_WIDTH, MOUTH_HEIGHT);
+  lv_obj_set_size(mouth_cont, MOUTH_WIDTH, MOUTH_HEIGHT_MIN);
   lv_obj_set_style_bg_opa(mouth_cont, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(mouth_cont, 0, 0);
   lv_obj_align(mouth_cont, LV_ALIGN_CENTER, 0, MOUTH_OFFSET_Y);
@@ -478,12 +617,12 @@ void ui_robo_eyes_init(void) {
   lv_obj_add_flag(mouth_cont, LV_OBJ_FLAG_HIDDEN);
 
   mouth_circle = lv_obj_create(mouth_cont);
-  lv_obj_set_size(mouth_circle, MOUTH_WIDTH, MOUTH_HEIGHT * 2);
+  lv_obj_set_size(mouth_circle, MOUTH_WIDTH, MOUTH_HEIGHT_MIN * 2);
   lv_obj_set_style_radius(mouth_circle, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(mouth_circle, EYE_COLOR, 0);
   lv_obj_set_style_bg_opa(mouth_circle, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(mouth_circle, 0, 0);
-  lv_obj_align(mouth_circle, LV_ALIGN_TOP_MID, 0, -MOUTH_HEIGHT);
+  lv_obj_align(mouth_circle, LV_ALIGN_TOP_MID, 0, -MOUTH_HEIGHT_MIN);
 
   left_cheek = lv_obj_create(scr_eyes);
   lv_obj_add_style(left_cheek, &style_mask, 0);
