@@ -41,11 +41,13 @@
 #define TEAR_START_Y 100
 #define TEAR_END_Y 220
 
-// Mouth Config (Laugh)
-#define MOUTH_WIDTH 180
-#define MOUTH_HEIGHT 90
-#define MOUTH_OFFSET_Y 100
-#define MOUTH_RADIUS 15
+// Laugh Config
+#define LAUGH_EYE_WIDTH 100
+#define LAUGH_EYE_OFFSET_Y -30
+#define MOUTH_WIDTH 200
+#define MOUTH_HEIGHT 100
+#define MOUTH_OFFSET_Y 60
+#define MOUTH_RADIUS LV_RADIUS_CIRCLE
 
 // Objects
 static lv_obj_t *scr_eyes = NULL;
@@ -76,6 +78,7 @@ static int timer_ms = 0;
 static int breath_phase = 0;
 static int16_t gaze_x = 0;
 static int16_t gaze_y = 0;
+static int laugh_shake_phase = 0;
 
 // Styles
 static lv_style_t style_eye;
@@ -83,10 +86,10 @@ static lv_style_t style_mask;
 static lv_style_t style_tear_part;
 static lv_style_t style_line;
 
-// Line Points for > < (Flatter/Squashed)
-// Line Points for > < (Flatter/Squashed)
-static lv_point_t left_arrow_pts[] = {{0, 18}, {70, 30}, {0, 44}};
-static lv_point_t right_arrow_pts[] = {{70, 18}, {0, 30}, {70, 44}};
+// Line Points for > < (Laugh Eyes - wide and flat)
+static lv_point_t left_arrow_pts[] = {{0, 0}, {LAUGH_EYE_WIDTH, 15}, {0, 30}};
+static lv_point_t right_arrow_pts[] = {
+    {LAUGH_EYE_WIDTH, 0}, {0, 15}, {LAUGH_EYE_WIDTH, 30}};
 
 // -----------------------------------------------------------------------------
 // Position Update
@@ -98,21 +101,34 @@ static void update_positions(void) {
 
   int16_t breath = (int16_t)(3.0f * sinf(breath_phase * 0.01745f));
 
+  // Laugh shake effect - faster oscillation
+  int16_t shake_x = 0;
+  int16_t shake_y = 0;
+  if (current_emotion == EMO_LAUGH) {
+    laugh_shake_phase += 25; // Fast shake
+    if (laugh_shake_phase >= 360)
+      laugh_shake_phase = 0;
+    shake_x = (int16_t)(3.0f * sinf(laugh_shake_phase * 0.01745f));
+    shake_y = (int16_t)(4.0f * sinf(laugh_shake_phase * 2.0f * 0.01745f));
+  }
+
   if (left_eye && right_eye) {
     lv_obj_align(left_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X + gaze_x,
                  breath + gaze_y);
     lv_obj_align(right_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
                  breath + gaze_y);
   }
-  if (left_laugh_eye && right_laugh_eye) {
-    lv_obj_align(left_laugh_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X + gaze_x,
-                 breath + gaze_y);
-    lv_obj_align(right_laugh_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
-                 breath + gaze_y);
+  if (left_laugh_eye && right_laugh_eye && current_emotion == EMO_LAUGH) {
+    lv_obj_align(left_laugh_eye, LV_ALIGN_CENTER,
+                 -EYE_OFFSET_X + gaze_x + shake_x,
+                 LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
+    lv_obj_align(right_laugh_eye, LV_ALIGN_CENTER,
+                 EYE_OFFSET_X + gaze_x + shake_x,
+                 LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
   }
-  if (mouth_cont) {
-    lv_obj_align(mouth_cont, LV_ALIGN_CENTER, gaze_x,
-                 MOUTH_OFFSET_Y + breath + gaze_y);
+  if (mouth_cont && current_emotion == EMO_LAUGH) {
+    lv_obj_align(mouth_cont, LV_ALIGN_CENTER, gaze_x + shake_x,
+                 MOUTH_OFFSET_Y + shake_y + gaze_y);
   }
 }
 
@@ -418,7 +434,7 @@ void ui_robo_eyes_init(void) {
   lv_style_set_border_width(&style_mask, 0);
 
   lv_style_init(&style_line);
-  lv_style_set_line_width(&style_line, 10);
+  lv_style_set_line_width(&style_line, 14);
   lv_style_set_line_color(&style_line, EYE_COLOR);
   lv_style_set_line_rounded(&style_line, true);
 
