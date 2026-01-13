@@ -42,9 +42,10 @@
 #define TEAR_END_Y 220
 
 // Mouth Config (Laugh)
-#define MOUTH_WIDTH 160
-#define MOUTH_HEIGHT 80
-#define MOUTH_OFFSET_Y 120
+#define MOUTH_WIDTH 180
+#define MOUTH_HEIGHT 90
+#define MOUTH_OFFSET_Y 100
+#define MOUTH_RADIUS 15
 
 // Objects
 static lv_obj_t *scr_eyes = NULL;
@@ -83,8 +84,9 @@ static lv_style_t style_tear_part;
 static lv_style_t style_line;
 
 // Line Points for > < (Flatter/Squashed)
-static lv_point_t left_arrow_pts[] = {{0, 10}, {70, 30}, {0, 50}};
-static lv_point_t right_arrow_pts[] = {{70, 10}, {0, 30}, {70, 50}};
+// Line Points for > < (Flatter/Squashed)
+static lv_point_t left_arrow_pts[] = {{0, 18}, {70, 30}, {0, 44}};
+static lv_point_t right_arrow_pts[] = {{70, 18}, {0, 30}, {70, 44}};
 
 // -----------------------------------------------------------------------------
 // Position Update
@@ -450,21 +452,22 @@ void ui_robo_eyes_init(void) {
   lv_obj_add_flag(right_laugh_eye, LV_OBJ_FLAG_HIDDEN);
 
   mouth_cont = lv_obj_create(scr_eyes);
-  lv_obj_set_size(mouth_cont, 200, 100); // Wider & Shorter
+  lv_obj_set_size(mouth_cont, MOUTH_WIDTH, MOUTH_HEIGHT);
   lv_obj_set_style_bg_opa(mouth_cont, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(mouth_cont, 0, 0);
-  lv_obj_align(mouth_cont, LV_ALIGN_CENTER, 0, 80); // Closer to eyes
+  lv_obj_align(mouth_cont, LV_ALIGN_CENTER, 0, MOUTH_OFFSET_Y);
   lv_obj_clear_flag(mouth_cont, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_clip_corner(mouth_cont, true, 0);
+  lv_obj_set_style_radius(mouth_cont, MOUTH_RADIUS, 0);
   lv_obj_add_flag(mouth_cont, LV_OBJ_FLAG_HIDDEN);
 
   mouth_circle = lv_obj_create(mouth_cont);
-  lv_obj_set_size(mouth_circle, 200, 200);
+  lv_obj_set_size(mouth_circle, MOUTH_WIDTH, MOUTH_HEIGHT * 2);
   lv_obj_set_style_radius(mouth_circle, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(mouth_circle, EYE_COLOR, 0);
   lv_obj_set_style_bg_opa(mouth_circle, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(mouth_circle, 0, 0);
-  lv_obj_align(mouth_circle, LV_ALIGN_TOP_MID, 0, -100);
+  lv_obj_align(mouth_circle, LV_ALIGN_TOP_MID, 0, -MOUTH_HEIGHT);
 
   left_cheek = lv_obj_create(scr_eyes);
   lv_obj_add_style(left_cheek, &style_mask, 0);
