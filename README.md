@@ -4,6 +4,66 @@
 | Supported LCD Controllers | SPD2010 | GC9B71 | SH8601 |
 | ------------------------- | ------- | ------ | ------ |
 
+# Waveshare ESP32-S3 Touch AMOLED 1.43" - Robot Eyes Project
+
+## 📋 Product Features
+
+This product adopts **ESP32-S3R8** chip with 2.4GHz WiFi and Bluetooth BLE 5 support, integrates high-capacity Flash and PSRAM. Onboard **1.43inch AMOLED display** which can smoothly run GUI programs such as LVGL. Onboard rich peripheral resources such as RTC chip, QMI8658 6-axis IMU, TF card slot, Lithium battery header, etc., and reserved USB, UART, I2C and GPIO pin headers, offering strong compatibility and expandability. It is suitable for the quick development of HMI and other ESP32-S3 applications.
+
+### 🚀 Key Features
+
+- ⚡ **High-performance Xtensa 32-bit LX7 dual-core processor**, up to **240MHz** main frequency
+- 📶 Supports **2.4GHz Wi-Fi (802.11 b/g/n)** and **Bluetooth 5 (LE)**, with onboard antenna. Supports switching to use external antenna via resoldering an onboard resistor
+- 💾 Built-in **512KB SRAM** and **384KB ROM**, with onboard **16MB Flash** and **8MB PSRAM**
+- 🖥️ Onboard **1.43inch AMOLED display**, QSPI interface, **466 × 466 resolution**, **16.7M colors**
+- 👆 Supports **capacitive touch** function controlled via I2C interface
+- 🎯 Onboard **QMI8658 6-axis IMU** (3-axis accelerometer and 3-axis gyroscope) for detecting motion gestures, counting steps, etc.
+- 🕐 Onboard **PCF85063 RTC chip** with reserved SH1.0 RTC battery header (supports charging) for RTC function requirement
+- 🔘 Onboard RST button and programmable BOOT button for easy custom function development
+- 🔋 Onboard **3.7V MX1.25 Lithium battery** recharge/discharge header
+- 💿 Onboard **TF card slot** for external TF card storage of pictures or files
+- 🔌 Onboard **USB Type-C** port for power supply, program downloading, and debugging
+- 📌 Onboard UART and I2C SH1.0 4PIN connector, reserved **2 × 14PIN 1.27mm pitch headers**, adapting multiple GPIO interfaces
+- 🎨 Optional CNC metal case, with clear and colorful label on the back
+
+---
+
+## 📊 AMOLED Display Specifications
+
+| Parameter | Specification |
+|-----------|---------------|
+| **Display Panel** | AMOLED |
+| **Display Size** | 1.43 inch |
+| **Resolution** | 466 × 466 |
+| **Display Colors** | 16.7M |
+| **Brightness** | 350 cd/㎡ |
+| **Contrast Ratio** | 60000:1 |
+| **Communication Interface** | QSPI |
+| **Driver IC** | **SH8601** |
+| **Touch** | Supported |
+| **Touch IC** | **FT3168** |
+
+---
+
+## 🔧 Technical Specifications Summary
+
+| Component | Specification |
+|-----------|---------------|
+| **MCU** | ESP32-S3R8 (Dual-core LX7 @ 240MHz) |
+| **Wi-Fi** | 802.11 b/g/n (2.4GHz) |
+| **Bluetooth** | BLE 5.0 |
+| **RAM** | 512KB SRAM + 8MB PSRAM |
+| **Flash** | 16MB |
+| **Display** | 1.43" AMOLED, 466×466, 16.7M colors |
+| **Touch** | Capacitive (FT3168) |
+| **IMU** | QMI8658 (6-axis) |
+| **RTC** | PCF85063 |
+| **Storage** | TF Card Slot |
+| **Battery** | 3.7V Li-ion (MX1.25 connector) |
+| **USB** | Type-C |
+
+---
+
 # QSPI LCD (with RAM) and Touch Panel Example
 
 [esp_lcd](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/lcd.html) provides several panel drivers out-of box, e.g. ST7789, SSD1306, NT35510. However, there're a lot of other panels on the market, it's beyond `esp_lcd` component's responsibility to include them all.

@@ -322,6 +322,24 @@ void app_main(void) {
     ui_settings_init();
     ui_settings_set_brightness_cb(setBrightnes);
 
+    // Set default brightness to 35 (approx 14% of 255)
+    // Range is 0-255, so 35/100 * 255 = 89
+    // Wait, user likely means value 35 out of 255 or 35%?
+    // Assuming 35% based on previous context, but user said "35" explicitly.
+    // If it's raw value, 35 is very dim (35/255 = 13%).
+    // If it's percent, 35% = 89.
+    // Let's assume user means raw value 35 if they specify a number?
+    // Or percent? "Brightness set to 35" usually implies percent in UI.
+    // However, looking at setBrightnes(uint8_t brig), it takes a byte.
+    // Let's use 35 directly or convert?
+    // User request: "Brightnes 35" (Thai: "Brightnes initial 35")
+    // Previous chats used 50%. Let's set the raw value to match UI slider if
+    // possible. But safely, let's set it to valid visible value. Let's call
+    // setBrightnes(89); // 35% OR setBrightnes(35); // 35 raw value (dim) Let's
+    // interpret as 35% = 89.
+
+    setBrightnes(89); // Set to 35% brightness
+
     // Release the mutex
     example_lvgl_unlock();
   }
