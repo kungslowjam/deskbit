@@ -1,0 +1,4 @@
+dependencies:
+  lvgl/lvgl:
+    git: https://github.com/lvgl/lvgl.git
+    version: v9.4.0

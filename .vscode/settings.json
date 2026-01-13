@@ -1,0 +1,40 @@
+{
+  "idf.adapterTargetName": "esp32s3",
+  "idf.portWin": "COM5",
+  "idf.flashType": "UART",
+  "files.associations": {
+    "esp_lcd_sh8601.h": "c",
+    "esp_lcd_touch_ft5x06.h": "c",
+    "gui_guider.h": "c",
+    "user_app.h": "c",
+    "pcf85063.h": "c",
+    "touch_bsp.h": "c",
+    "qmi8658c.h": "c",
+    "sd_card_bsp.h": "c",
+    "esp_wifi_bsp.h": "c",
+    "ble_scan_bsp.h": "c",
+    "gpio_bsp.h": "c"
+  },
+  "C_Cpp.errorSquiggles": "disabled",
+  "idf.espIdfPathWin": "C:\\Users\\hello\\esp\\v5.5.2\\esp-idf",
+  "idf.pythonBinPathWin": "e:\\Espressif\\python_env\\idf5.1_py3.11_env\\Scripts\\python.exe",
+  "idf.toolsPathWin": "c:\\Users\\hello\\.espressif",
+  "idf.customExtraPaths": "e:\\Espressif\\tools\\xtensa-esp-elf-gdb\\12.1_20231023\\xtensa-esp-elf-gdb\\bin;e:\\Espressif\\tools\\riscv32-esp-elf-gdb\\12.1_20231023\\riscv32-esp-elf-gdb\\bin;e:\\Espressif\\tools\\xtensa-esp32-elf\\esp-12.2.0_20230208\\xtensa-esp32-elf\\bin;e:\\Espressif\\tools\\xtensa-esp32s2-elf\\esp-12.2.0_20230208\\xtensa-esp32s2-elf\\bin;e:\\Espressif\\tools\\xtensa-esp32s3-elf\\esp-12.2.0_20230208\\xtensa-esp32s3-elf\\bin;e:\\Espressif\\tools\\riscv32-esp-elf\\esp-12.2.0_20230208\\riscv32-esp-elf\\bin;e:\\Espressif\\tools\\esp32ulp-elf\\2.35_20220830\\esp32ulp-elf\\bin;e:\\Espressif\\tools\\cmake\\3.24.0\\bin;e:\\Espressif\\tools\\openocd-esp32\\v0.12.0-esp32-20230921\\openocd-esp32\\bin;e:\\Espressif\\tools\\ninja\\1.10.2;e:\\Espressif\\tools\\idf-exe\\1.0.3;e:\\Espressif\\tools\\ccache\\4.8\\ccache-4.8-windows-x86_64;e:\\Espressif\\tools\\dfu-util\\0.11\\dfu-util-0.11-win64;e:\\Espressif\\tools\\esp-rom-elfs\\20230320",
+  "idf.customExtraVars": {
+    "OPENOCD_SCRIPTS": "e:\\Espressif\\tools\\openocd-esp32\\v0.12.0-esp32-20230921/openocd-esp32/share/openocd/scripts",
+    "IDF_CCACHE_ENABLE": "1",
+    "ESP_ROM_ELF_DIR": "e:\\Espressif\\tools\\esp-rom-elfs\\20230320/",
+    "IDF_TARGET": "esp32s3"
+  },
+  "idf.gitPathWin": "e:\\espidf\\Espressif\\tools\\idf-git\\2.39.2\\cmd\\git.exe",
+  "idf.openOcdConfigs": [
+    "board/esp32s3-builtin.cfg"
+  ],
+  "idf.pythonInstallPath": "c:\\Users\\hello\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "clangd.path": "c:\\Users\\hello\\.espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=c:\\Users\\hello\\Desktop\\09_FactoryProgram\\build"
+  ]
+}
