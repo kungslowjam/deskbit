@@ -59,12 +59,12 @@ LV_FONT_DECLARE(lv_font_montserratMedium_23);
 #define BOUNCE_AMPLITUDE 6 // More bounce
 #define WOBBLE_AMPLITUDE 8 // More wobble = more playful
 #define MOUTH_BOUNCE_AMPLITUDE 25
-// Enhanced Eye Animation - FAST & DYNAMIC
-#define EYE_PULSE_SCALE_MIN 0.85f
-#define EYE_PULSE_SCALE_MAX 1.15f
-#define EYE_SQUINT_HEIGHT_MIN 22
-#define EYE_SQUINT_HEIGHT_MAX 38 // Bigger range = more visible
-#define EYE_PULSE_SPEED 8.0f     // MUCH faster! Very energetic
+// Enhanced Eye Animation - SMOOTH & ALIVE
+#define EYE_PULSE_SCALE_MIN 0.90f
+#define EYE_PULSE_SCALE_MAX 1.10f
+#define EYE_SQUINT_HEIGHT_MIN 24
+#define EYE_SQUINT_HEIGHT_MAX 36
+#define EYE_PULSE_SPEED 5.0f // Slower dialled back for realism
 
 // Objects
 static lv_obj_t *scr_eyes = NULL;
@@ -109,12 +109,25 @@ static lv_obj_t *canvas_heart_ref = NULL; // Cached heart canvas
 #define HEART_SCALE_MIN 0.85f
 #define HEART_SCALE_MAX 1.20f
 #define HEART_FLOAT_AMPLITUDE 8
-#define HEART_COLOR lv_color_hex(0xFF6B8A) // Pink color for glow
+#define HEART_COLOR lv_color_hex(0xFF6B8A)      // Pink color for glow
+#define ANGRY_COLOR lv_color_hex(0xFF0000)      // Red
+#define ANGRY_RAGE_COLOR lv_color_hex(0xCC0000) // Darker Red for pulse
+#define ANGRY_EYE_WIDTH 160
+#define ANGRY_EYE_HEIGHT 110
 
 // Canvas Teardrop Single Instance Cache
 // Canvas Teardrop Single Instance Cache
 static lv_obj_t *canvas_tear_ref = NULL;
 static lv_obj_t *canvas_grin_ref = NULL;
+
+static lv_obj_t *left_angry_eye = NULL;
+static lv_obj_t *right_angry_eye = NULL;
+
+// Frame 2: Blue Angry Face (Cyan Eyes + Mouth)
+static lv_obj_t *left_angry_blue_eye = NULL;
+static lv_obj_t *right_angry_blue_eye = NULL;
+static lv_obj_t *angry_blue_mouth = NULL;
+// Lids removed - using direct canvas styling
 
 static lv_timer_t *main_timer = NULL;
 
@@ -125,7 +138,8 @@ typedef enum {
   EMO_SAD,
   EMO_LAUGH,
   EMO_LOVE,
-  EMO_SLEEP
+  EMO_SLEEP,
+  EMO_ANGRY
 } emotion_t;
 static emotion_t current_emotion = EMO_IDLE;
 static int timer_ms = 0;
@@ -166,8 +180,8 @@ static float gaze_vel_x = 0.0f; // Velocity for spring physics
 static float gaze_vel_y = 0.0f;
 
 // Physics Constants
-#define GAZE_SPRING_K 0.18f // Stiffness
-#define GAZE_DAMPING 0.65f  // Friction (lower = more bouncy)
+#define GAZE_SPRING_K 0.12f // Stiffness (Adjusted for faster loop)
+#define GAZE_DAMPING 0.85f  // Friction (Higher value = Less loss per frame)
 
 // Saccade (Random micro-movements)
 static int saccade_timer = 0;
@@ -207,6 +221,293 @@ static lv_point_t sleep_eye_pts[LAUGH_EYE_POINTS];
 // Dynamic mouth state
 // (Old waveline mouth vars removed)
 
+// Idle Animation State (Random Ticks)
+typedef enum {
+  IDLE_ACT_NONE,
+  IDLE_ACT_SQUINT,
+  IDLE_ACT_WIDE,
+  IDLE_ACT_SCAN
+} idle_action_t;
+static idle_action_t idle_anim_type = IDLE_ACT_NONE;
+static int idle_anim_timer = 0;
+static int next_idle_anim_time = 2000;
+
+static float idle_anim_phase = 0.0f; // 0.0 to 1.0 logic
+
+// Smoothed Size State (for Normal/Idle Jelly Physics)
+static float current_eye_w = EYE_WIDTH;
+static float current_eye_h = EYE_HEIGHT;
+#define SIZE_LERP 0.2f // Higher = Faster/More responsive, Lower = Smoother
+
+// -----------------------------------------------------------------------------
+// Physics & Animation Helpers
+// -----------------------------------------------------------------------------
+
+static void update_laugh_physics(float phase_rad, float intensity_scale) {
+  // --- 1. Update EYES (Arc 'n' vs Sharp '><') ---
+  // Rhythm matches the head bounce
+  float wave_speed = 1.5f;
+  float wave_for_eyes = sinf(phase_rad * wave_speed);
+
+  // Check if mouth is open (Sync with mouth logic: wave > -0.2)
+  bool is_mouth_open = (wave_for_eyes > -0.2f);
+
+  if (is_mouth_open) {
+    // -----------------------------------------------------
+    // Draw '><' Shape (Sharp Squint)
+    // -----------------------------------------------------
+    // Left Eye: '>' (Points Right)
+    // Path: Top-Left -> Center-Right -> Bottom-Left
+    int16_t x1 = 10, y1 = 0;
+    int16_t x2 = 90, y2 = 25; // Apex
+    int16_t x3 = 10, y3 = 50;
+
+    for (int i = 0; i < LAUGH_EYE_POINTS; i++) {
+      float t = (float)i / (LAUGH_EYE_POINTS - 1);
+      if (t < 0.5f) {
+        // Top leg
+        float st = t * 2.0f; // 0..1
+        left_arrow_pts[i].x = x1 + (int16_t)((x2 - x1) * st);
+        left_arrow_pts[i].y = y1 + (int16_t)((y2 - y1) * st);
+      } else {
+        // Bottom leg
+        float st = (t - 0.5f) * 2.0f; // 0..1
+        left_arrow_pts[i].x = x2 + (int16_t)((x3 - x2) * st);
+        left_arrow_pts[i].y = y2 + (int16_t)((y3 - y2) * st);
+      }
+    }
+
+    // Right Eye: '<' (Points Left)
+    // Path: Top-Right -> Center-Left -> Bottom-Right
+    x1 = 90;
+    y1 = 0;
+    x2 = 10;
+    y2 = 25; // Apex
+    x3 = 90;
+    y3 = 50;
+
+    for (int i = 0; i < LAUGH_EYE_POINTS; i++) {
+      float t = (float)i / (LAUGH_EYE_POINTS - 1);
+      if (t < 0.5f) {
+        float st = t * 2.0f;
+        right_arrow_pts[i].x = x1 + (int16_t)((x2 - x1) * st);
+        right_arrow_pts[i].y = y1 + (int16_t)((y2 - y1) * st);
+      } else {
+        float st = (t - 0.5f) * 2.0f;
+        right_arrow_pts[i].x = x2 + (int16_t)((x3 - x2) * st);
+        right_arrow_pts[i].y = y2 + (int16_t)((y3 - y2) * st);
+      }
+    }
+
+  } else {
+    // -----------------------------------------------------
+    // Draw '^' Shape (Arc) - Existing Logic
+    // -----------------------------------------------------
+    // Morph Factor: -1.0 (Squint/Grin) to 1.0 (Open/High Arc)
+    float base_h = 12.0f;
+    float dynamic_h = base_h + (5.0f * wave_for_eyes * intensity_scale);
+
+    // Curvature (a coeff)
+    float sharpness =
+        1.0f - (0.3f * wave_for_eyes); // 1.3 (Sharp) to 0.7 (Round)
+    float a_coeff = (dynamic_h / 2500.0f) * sharpness;
+
+    for (int i = 0; i < LAUGH_EYE_POINTS; i++) {
+      float t = (float)i / (LAUGH_EYE_POINTS - 1); // 0.0 to 1.0
+      int16_t x = (int16_t)(t * 100.0f);
+      // y = a * (x - 50)^2
+      float dx = x - 50.0f;
+      int16_t y = (int16_t)(a_coeff * dx * dx);
+
+      left_arrow_pts[i].x = x;
+      left_arrow_pts[i].y = y;
+      right_arrow_pts[i].x = x;
+      right_arrow_pts[i].y = y;
+    }
+  }
+
+  if (left_laugh_eye)
+    lv_line_set_points(left_laugh_eye, left_arrow_pts, LAUGH_EYE_POINTS);
+  if (right_laugh_eye)
+    lv_line_set_points(right_laugh_eye, right_arrow_pts, LAUGH_EYE_POINTS);
+
+  // Line width - THICKER for better look
+  float pulse_rad = phase_rad; // Reuse phase for sync
+  int16_t line_thickness =
+      16 + (int16_t)(4.0f * intensity_scale * sinf(pulse_rad * 2.0f));
+
+  if (left_laugh_eye)
+    lv_obj_set_style_line_width(left_laugh_eye, line_thickness, 0);
+  if (right_laugh_eye)
+    lv_obj_set_style_line_width(right_laugh_eye, line_thickness, 0);
+}
+
+static void update_laugh_mouth_and_shake(float phase_rad, float intensity_scale,
+                                         int16_t *out_shake_x,
+                                         int16_t *out_shake_y,
+                                         int16_t *out_squint) {
+  float wave_speed = 1.5f;
+  float laugh_wave = sinf(phase_rad * wave_speed);
+
+  // Soft bounce (no hard clipping)
+  float bounce = (laugh_wave > 0) ? laugh_wave : (laugh_wave * 0.2f);
+  *out_shake_y = -(int16_t)(8.0f * bounce * intensity_scale);
+  *out_shake_x = 0;
+
+  // Squint syncs with bounce
+  *out_squint = (int16_t)(4.0f * bounce * intensity_scale);
+
+  // BIG MOUTH / GRIN MOUTH Animation (2-Frame Toggle)
+  // Toggle Threshold > -0.2 : Morph towards Open
+  bool show_open = (laugh_wave > -0.2f);
+
+  if (show_open) {
+    if (big_laugh_mouth &&
+        lv_obj_has_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN)) {
+      lv_obj_clear_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (grin_laugh_mouth &&
+        !lv_obj_has_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN)) {
+      lv_obj_add_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
+    }
+  } else {
+    if (grin_laugh_mouth &&
+        lv_obj_has_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN)) {
+      lv_obj_clear_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (big_laugh_mouth &&
+        !lv_obj_has_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN)) {
+      lv_obj_add_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+}
+
+static void update_sleep_physics(float breath_rad, float *out_heave) {
+  // 1. ASYMMETRIC BREATH: Snore rhythm
+  float wave = sinf(breath_rad);
+  float heave = (wave > 0) ? powf(wave, 1.5f) : (wave * 0.5f);
+  *out_heave = heave;
+
+  // 2. YAWNING MOUTH LOGIC
+  if (sleep_mouth) {
+    float mouth_open = (heave > 0) ? heave : 0.0f;
+    int16_t m_h = (int16_t)(5.0f + 40.0f * mouth_open);
+    int16_t m_w = (int16_t)(10.0f + 20.0f * mouth_open);
+    lv_obj_set_size(sleep_mouth, m_w, m_h);
+    lv_obj_set_style_opa(sleep_mouth, 100 + (int16_t)(155 * mouth_open), 0);
+  }
+
+  // 3. EYES SQUASH & STRETCH
+  float width_mod = 0.9f + (0.25f * (heave + 1.0f) * 0.5f);
+  float squint_fac = (heave > 0.5f) ? (1.0f + (heave - 0.5f) * 0.8f) : 1.0f;
+  float bend_mod = 0.015f * (1.0f - 0.4f * heave * squint_fac);
+  float eye_dip = 15.0f + (8.0f * heave);
+
+  for (int i = 0; i < LAUGH_EYE_POINTS; i++) {
+    float t = (float)i / (LAUGH_EYE_POINTS - 1);
+    int16_t x = (int16_t)(t * 90.0f * width_mod);
+    float center_x = 45.0f * width_mod;
+    float dx = (float)x - center_x;
+    int16_t y = (int16_t)eye_dip - (int16_t)(bend_mod * dx * dx);
+
+    sleep_eye_pts[i].x = x;
+    sleep_eye_pts[i].y = y;
+  }
+
+  if (left_sleep_eye) {
+    lv_line_set_points(left_sleep_eye, sleep_eye_pts, LAUGH_EYE_POINTS);
+    lv_obj_set_style_line_width(left_sleep_eye, 24, 0);
+    lv_obj_set_style_line_opa(left_sleep_eye, 160 + (int16_t)(40 * heave), 0);
+  }
+  if (right_sleep_eye) {
+    lv_line_set_points(right_sleep_eye, sleep_eye_pts, LAUGH_EYE_POINTS);
+    lv_obj_set_style_line_width(right_sleep_eye, 24, 0);
+    lv_obj_set_style_line_opa(right_sleep_eye, 160 + (int16_t)(40 * heave), 0);
+  }
+}
+
+static void update_angry_physics(int timer_ms, int16_t *out_shake_y,
+                                 int16_t *out_zoom) {
+  // 1. "Seething" Compression (Eyes shrink/constrict to focus)
+  // ~ 2 second cycle
+  float rage_cycle = sinf((float)timer_ms * 0.003f);
+
+  // Constrict eyes: Scale down to range [200..230] (approx 0.8x)
+  // Normal is 256. Smaller = More intense/focused anger.
+  *out_zoom = 215 + (int16_t)(15.0f * rage_cycle);
+
+  // 2. "Intensity" - replaced tremble with just stable state
+  // No random shaking. Just focus on the zooming.
+  *out_shake_y = 0;
+}
+
+static void update_happy_physics(float breath_rad, int16_t *out_bounce) {
+  // 1. Gentle bounce
+  *out_bounce = (int16_t)(4.0f * sinf(breath_rad));
+
+  // 2. DYNAMIC SMILE MORPHING
+  float smile_intensity = 0.5f + 0.5f * sinf(breath_rad); // 0.0 to 1.0
+  float width = 110.0f + (20.0f * smile_intensity);
+  float depth = 12.0f + (8.0f * smile_intensity);
+  float mid_peak = 6.0f * smile_intensity;
+
+  for (int i = 0; i < HAPPY_MOUTH_POINTS; i++) {
+    float t = (float)i / (HAPPY_MOUTH_POINTS - 1);
+    int16_t x = (int16_t)(t * width);
+    float y;
+    if (t < 0.5f) {
+      float dt = (t - 0.25f) / 0.25f;
+      y = depth * (1.0f - dt * dt);
+    } else {
+      float dt = (t - 0.75f) / 0.25f;
+      y = depth * (1.0f - dt * dt);
+    }
+    if (t > 0.4f && t < 0.6f) {
+      float mid_t = (t - 0.4f) / 0.1f;
+      if (mid_t > 1.0f)
+        mid_t = 2.0f - mid_t;
+      y -= mid_peak * mid_t;
+    }
+    happy_mouth_pts[i].x = x;
+    happy_mouth_pts[i].y = (int16_t)y;
+  }
+
+  if (happy_mouth) {
+    lv_line_set_points(happy_mouth, happy_mouth_pts, HAPPY_MOUTH_POINTS);
+  }
+}
+
+static void update_love_physics(float intensity_scale, int16_t *out_zoom,
+                                int16_t *out_float_y, int16_t *out_wobble) {
+  // Heartbeat phase (Smoother speed)
+  heart_beat_phase += 5.0f;
+  if (heart_beat_phase >= 360.0f)
+    heart_beat_phase = 0.0f;
+  float beat_rad = heart_beat_phase * 0.01745f;
+
+  // Smooth Sine Pulse (No sharp cutoff)
+  float raw_sine = sinf(beat_rad);
+  // Map -1..1 to 0..1
+  float beat_wave = (raw_sine + 1.0f) * 0.5f;
+
+  // Make the pulse slightly non-linear for better "heart" feel but soft
+  beat_wave = beat_wave * beat_wave;
+
+  float base_zoom = 256.0f;
+
+  // "Gradually Bigger":
+  // 1. Overall size grows with intensity (up to +60 scale)
+  // 2. Pulse amplitude grows with intensity (up to +40 scale)
+  float growth = 60.0f * intensity_scale;
+  float pulse_amp = 40.0f * intensity_scale;
+
+  *out_zoom = (int16_t)(base_zoom + growth + (pulse_amp * beat_wave));
+
+  // Float & Wobble (Gentle)
+  *out_float_y = (int16_t)(10.0f * sinf(beat_rad * 0.5f) * intensity_scale);
+  *out_wobble = (int16_t)(4.0f * cosf(beat_rad * 0.3f) * intensity_scale);
+}
+
 // -----------------------------------------------------------------------------
 // Position Update
 // -----------------------------------------------------------------------------
@@ -215,218 +516,25 @@ static void update_positions(void) {
   if (breath_phase >= 360)
     breath_phase = 0;
 
-  // Organic Breathing: Main slow wave + subtle secondary wave for "life"
-  float rad1 = breath_phase * 0.01745f;
-  float rad2 = breath_phase * 2.1f * 0.01745f; // Faster micro-oscillation
-  int16_t breath = (int16_t)(3.2f * sinf(rad1) + 0.6f * sinf(rad2));
+  // Global Breathe Wave (used by Normal, Happy, Sleep)
+  float breath_rad = breath_phase * 0.01745f;
 
-  // Laugh animation - organic bouncy movement
-  int16_t shake_x = 0;
-  int16_t shake_y = 0;
-  int16_t squint_offset = 0;
-
-  if (current_emotion == EMO_LAUGH) {
-    // Build up laugh intensity
-    if (laugh_intensity < 100)
-      laugh_intensity += 6;
-    float intensity_scale = laugh_intensity / 100.0f;
-
-    // Phases
-    laugh_shake_phase += 25;
-    if (laugh_shake_phase >= 360)
-      laugh_shake_phase = 0;
-    float phase_rad = laugh_shake_phase * 0.01745f;
-
-    eye_pulse_phase += EYE_PULSE_SPEED;
-    if (eye_pulse_phase >= 360.0f)
-      eye_pulse_phase = 0.0f;
-    float pulse_rad = eye_pulse_phase * 0.01745f;
-
-    // --- 1. Update EYES (Arc 'n' Shape) - DYNAMIC MORPHING ---
-    // Use laugh_wave (calculated below, but we can compute it here or use
-    // previous frame's? Let's compute 'wave_for_eyes' here to be safe and
-    // consistent.
-
-    // Rhythm matches the head bounce
-    float wave_speed = 1.5f;
-    float wave_for_eyes = sinf(phase_rad * wave_speed);
-
-    // Morph Factor: -1.0 (Squint/Grin) to 1.0 (Open/High Arc)
-    // We map this to parabola parameters.
-
-    // Height of vertex
-    // Open: High (25px), Grin: Lower/Sharper (15px)
-    float base_h = 20.0f;
-    float dynamic_h = base_h + (5.0f * wave_for_eyes * intensity_scale);
-
-    // Curvature (a coeff)
-    // Sharper when Grin (Negative wave) -> Higher 'a' value (narrower parabola)
-    // Flatter/Rounder when Open (Positive wave) -> Lower 'a' value
-    float sharpness =
-        1.0f - (0.3f * wave_for_eyes); // 1.3 (Sharp) to 0.7 (Round)
-
-    // Parabola: y = a(x-h)^2
-    // We want ends at y = dynamic_h? No, ends usually fixed or relative.
-    // Let's fix ends at y=dynamic_h, Peak at y=0.
-    // a = dynamic_h / (50^2) * sharpness
-
-    float a_coeff = (dynamic_h / 2500.0f) * sharpness;
-
-    for (int i = 0; i < LAUGH_EYE_POINTS; i++) {
-      float t = (float)i / (LAUGH_EYE_POINTS - 1); // 0.0 to 1.0
-      int16_t x = (int16_t)(t * 100.0f);
-
-      // y = a * (x - 50)^2
-      float dx = x - 50.0f;
-      int16_t y = (int16_t)(a_coeff * dx * dx);
-
-      // Add 'Sharpness' artifact? (V-shape vs U-shape)
-      // If we want V-shape, we linerize near vertex.
-      // But parabola is fine, just changing aspect ratio (a_coeff) does a lot.
-
-      left_arrow_pts[i].x = x;
-      left_arrow_pts[i].y = y;
-
-      right_arrow_pts[i].x = x;
-      right_arrow_pts[i].y = y;
-    }
-
-    if (left_laugh_eye)
-      lv_line_set_points(left_laugh_eye, left_arrow_pts, LAUGH_EYE_POINTS);
-    if (right_laugh_eye)
-      lv_line_set_points(right_laugh_eye, right_arrow_pts, LAUGH_EYE_POINTS);
-
-    // Line width - THICKER for better look
-    int16_t line_thickness =
-        16 + (int16_t)(4.0f * intensity_scale *
-                       sinf(pulse_rad * 2)); // Thicker base (16)
-    if (left_laugh_eye)
-      lv_obj_set_style_line_width(left_laugh_eye, line_thickness, 0);
-    if (right_laugh_eye)
-      lv_obj_set_style_line_width(right_laugh_eye, line_thickness, 0);
-
-    // --- 2. BIG MOUTH - COMPLETELY STATIC (No animation to avoid flicker) ---
-    // The mouth just stays visible, eyes do all the animation
-    // --- 2. NEW LAUGH ANIMATION: "Head Back" Laugh ---
-    // --- 2. NEW LAUGH ANIMATION: "Jelly Mouth" Laugh ---
-    laugh_cycle++;
-
-    // Rhythm: Much slower, visible squash & stretch (Real Jelly feel)
-    float laugh_speed = 1.5f; // ~2 Hz (Slower and Smoother)
-    float laugh_wave = sinf(phase_rad * laugh_speed);
-
-    // Soft bounce (no hard clipping)
-    float bounce = (laugh_wave > 0) ? laugh_wave : (laugh_wave * 0.2f);
-    shake_y = -(int16_t)(8.0f * bounce * intensity_scale);
-
-    // Squint syncs with bounce
-    squint_offset = (int16_t)(4.0f * bounce * intensity_scale);
-
-    shake_x = 0;
-
-  } else if (current_emotion == EMO_SLEEP) {
-    // 1. ASYMMETRIC BREATH: Snore rhythm (Deep long breath, quick rest)
-    float sleep_rad = (float)breath_phase * 0.01745f;
-
-    // Create a "heaving" effect: slow buildup, quick drop
-    // Using a biased sine wave for organic feel
-    float wave = sinf(sleep_rad);
-    float heave = (wave > 0) ? powf(wave, 1.5f) : (wave * 0.5f);
-
-    // 2. YAWNING MOUTH LOGIC
-    // Mouth opens during the "inhale" (heave > 0)
-    if (sleep_mouth) {
-      float mouth_open = (heave > 0) ? heave : 0.0f;
-      int16_t m_h = (int16_t)(5.0f + 40.0f * mouth_open);
-      int16_t m_w = (int16_t)(10.0f + 20.0f * mouth_open);
-      lv_obj_set_size(sleep_mouth, m_w, m_h);
-      lv_obj_align(sleep_mouth, LV_ALIGN_CENTER, (int16_t)current_gaze_x,
-                   100 + (int16_t)current_gaze_y +
-                       (int16_t)(heave * 5.0f)); // Lowered to 100
-      lv_obj_set_style_opa(sleep_mouth, 100 + (int16_t)(155 * mouth_open), 0);
-    }
-
-    // 3. SQUASH & STRETCH: Eyes get wider and flatter when inhaling
-    float width_mod = 0.9f + (0.25f * (heave + 1.0f) * 0.5f); // 0.9 to 1.15
-
-    // Squint even harder when yawning wide!
-    float squint_fac = (heave > 0.5f) ? (1.0f + (heave - 0.5f) * 0.8f) : 1.0f;
-    float bend_mod =
-        0.015f * (1.0f - 0.4f * heave * squint_fac); // Flatter when wide
-
-    // 4. VERTICAL DIP: Face moves down more heavily
-    float eye_dip =
-        15.0f + (8.0f * heave); // Baseline 15px down, fluctuates 8px
-
-    for (int i = 0; i < LAUGH_EYE_POINTS; i++) {
-      float t = (float)i / (LAUGH_EYE_POINTS - 1);
-      int16_t x = (int16_t)(t * 90.0f * width_mod); // Slightly wider sweep
-
-      // y = peak_y - a*(x-center)^2
-      // To get 'U' shape (center is lowest/largest Y):
-      // Formula: y = eye_dip - bend_mod * dx * dx (Wait, Y increases downwards)
-      // If center (dx=0) should be at bottom, it needs the LARGEST y.
-      // So y = eye_dip + (bend_mod * dx * dx) makes center at top.
-      // We want y = eye_dip - (bend_mod * dx * dx) ? No.
-
-      // Let's be explicit:
-      // center_y = 40 (peak bottom)
-      // end_y = 20 (up)
-      // y = peak_y - a * dx^2
-      float center_x = 45.0f * width_mod;
-      float dx = (float)x - center_x;
-      // parabolic curve where center is the most bottom point (largest Y)
-      // Actually, in image center is LOWER than ends.
-      // Peak Y at center = eye_dip + constant
-      int16_t y = (int16_t)eye_dip - (int16_t)(bend_mod * dx * dx);
-
-      sleep_eye_pts[i].x = x;
-      sleep_eye_pts[i].y = y;
-    }
-
-    if (left_sleep_eye) {
-      lv_line_set_points(left_sleep_eye, sleep_eye_pts, LAUGH_EYE_POINTS);
-      lv_obj_set_style_line_width(left_sleep_eye, 24, 0); // Fatter eyes!
-      // Dim opacity slightly to simulate closed lids/low power
-      lv_obj_set_style_line_opa(left_sleep_eye, 160 + (int16_t)(40 * heave), 0);
-    }
-    if (right_sleep_eye) {
-      lv_line_set_points(right_sleep_eye, sleep_eye_pts, LAUGH_EYE_POINTS);
-      lv_obj_set_style_line_width(right_sleep_eye, 24, 0); // Fatter eyes!
-      lv_obj_set_style_line_opa(right_sleep_eye, 160 + (int16_t)(40 * heave),
-                                0);
-    }
-
-  } else {
-    // Reset
-    laugh_intensity = 0;
-    laugh_cycle = 0;
-
-    int16_t def_h = 20;
-    for (int i = 0; i < LAUGH_EYE_POINTS; i++) {
-      left_arrow_pts[i].y = def_h;
-      right_arrow_pts[i].y = def_h;
-      // X doesn't matter much as hidden, but safe to keep range 0-100?
-      // Or just let it be reused.
-    }
-  }
+  // Normal Eye Breathe Offset
+  float rad2 = breath_phase * 2.1f * 0.01745f;
+  int16_t breath_offset =
+      (int16_t)(3.2f * sinf(breath_rad) + 0.6f * sinf(rad2));
 
   // -----------------------------------------------------------------------------
-  // 1. SPRING-DAMPER PHYSICS UPDATE (Elastic Gaze)
+  // 1. SPRING-DAMPER PHYSICS UPDATE (Gaze)
   // -----------------------------------------------------------------------------
-  // Calculate force: F = k * (target - current)
   float force_x = (target_gaze_x - current_gaze_x) * GAZE_SPRING_K;
   float force_y = (target_gaze_y - current_gaze_y) * GAZE_SPRING_K;
-
-  // Update velocity: V = (V + force) * damping
   gaze_vel_x = (gaze_vel_x + force_x) * GAZE_DAMPING;
   gaze_vel_y = (gaze_vel_y + force_y) * GAZE_DAMPING;
-
-  // Update position
   current_gaze_x += gaze_vel_x;
   current_gaze_y += gaze_vel_y;
 
-  // Precision stop to avoid infinite tiny updates
+  // Precision stop
   if (fabsf(gaze_vel_x) < 0.01f &&
       fabsf(target_gaze_x - current_gaze_x) < 0.01f) {
     current_gaze_x = target_gaze_x;
@@ -438,225 +546,341 @@ static void update_positions(void) {
     gaze_vel_y = 0;
   }
 
-  // Convert float to int needed by LVGL
-  int16_t final_gaze_x = (int16_t)current_gaze_x;
-  int16_t final_gaze_y = (int16_t)current_gaze_y;
+  int16_t gaze_x = (int16_t)current_gaze_x;
+  int16_t gaze_y = (int16_t)current_gaze_y;
 
-  // Backward compatibility alias for rest of the function
-  int16_t gaze_x = final_gaze_x;
-  int16_t gaze_y = final_gaze_y;
+  // -----------------------------------------------------------------------------
+  // 2. Emotion Specific Logic
+  // -----------------------------------------------------------------------------
 
-  if (left_eye && right_eye) {
-    // 3D Rolling Effect: Eyes tilt slightly when looking to the sides
-    // Max tilt ~8 degrees. Positive X looks right -> clockwise roll.
-    int16_t roll = (int16_t)(final_gaze_x * 0.08f); // Simple scaling
+  int16_t shake_x = 0, shake_y = 0;
 
-    lv_obj_align(left_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X + final_gaze_x,
-                 breath + final_gaze_y);
-    lv_obj_align(right_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + final_gaze_x,
-                 breath + final_gaze_y);
-
-    // Apply rotation for depth feel
-    lv_obj_set_style_transform_angle(left_eye, roll * 10, 0);
-    lv_obj_set_style_transform_angle(right_eye, roll * 10, 0);
-  }
-
-  if (left_laugh_eye && right_laugh_eye && current_emotion == EMO_LAUGH) {
-    // Eyes bounce with shake_y
-    lv_obj_align(left_laugh_eye, LV_ALIGN_CENTER,
-                 -EYE_OFFSET_X + gaze_x + shake_x,
-                 LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
-    lv_obj_align(right_laugh_eye, LV_ALIGN_CENTER,
-                 EYE_OFFSET_X + gaze_x + shake_x,
-                 LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
-  }
-
-  // BIG MOUTH Position (Laugh) - Animated Jaw Position
-  // BIG MOUTH Position (Laugh) - Jelly Squash & Stretch Animation
-  // BIG MOUTH / GRIN MOUTH Animation (2-Frame Toggle)
-  // BIG MOUTH / GRIN MOUTH Animation (2-Frame Toggle)
   if (current_emotion == EMO_LAUGH) {
-    // SYNC WITH WAVE (Calculated using same phase/speed as eyes)
-    float wave_speed = 1.5f;
-    float laugh_wave = sinf(laugh_shake_phase * 0.01745f * wave_speed);
+    if (laugh_intensity < 100)
+      laugh_intensity += 6;
+    float intensity_scale = laugh_intensity / 100.0f;
 
-    // Toggle Threshold
-    // > -0.2 : Morph towards Open
-    bool show_open = (laugh_wave > -0.2f);
+    laugh_shake_phase += 15; // Slower, smoother heavy laugh (was 25)
+    if (laugh_shake_phase >= 360)
+      laugh_shake_phase = 0;
+    float phase_rad = laugh_shake_phase * 0.01745f;
 
-    if (show_open) {
-      // Frame 1: OPEN MOUTH (Pink)
-      if (big_laugh_mouth) {
-        lv_obj_clear_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
+    eye_pulse_phase += EYE_PULSE_SPEED;
+    if (eye_pulse_phase >= 360.0f)
+      eye_pulse_phase = 0.0f;
 
-        lv_obj_align(big_laugh_mouth, LV_ALIGN_CENTER, gaze_x + shake_x,
-                     BIG_MOUTH_OFFSET_Y + shake_y + gaze_y);
-      }
-      if (grin_laugh_mouth)
-        lv_obj_add_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
-    } else {
-      // Frame 2: GRIN MOUTH (Teeth)
-      if (grin_laugh_mouth) {
-        lv_obj_clear_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_align(grin_laugh_mouth, LV_ALIGN_CENTER, gaze_x + shake_x,
-                     BIG_MOUTH_OFFSET_Y + shake_y + gaze_y);
-      }
-      if (big_laugh_mouth)
-        lv_obj_add_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
+    // Update Helpers
+    update_laugh_physics(phase_rad, intensity_scale);
+
+    int16_t squint_offset = 0;
+    update_laugh_mouth_and_shake(phase_rad, intensity_scale, &shake_x, &shake_y,
+                                 &squint_offset);
+
+    // Apply Positions
+    if (left_laugh_eye)
+      lv_obj_align(left_laugh_eye, LV_ALIGN_CENTER,
+                   -EYE_OFFSET_X + gaze_x + shake_x - squint_offset,
+                   LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
+    if (right_laugh_eye)
+      lv_obj_align(right_laugh_eye, LV_ALIGN_CENTER,
+                   EYE_OFFSET_X + gaze_x + shake_x + squint_offset,
+                   LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
+
+    // Mouth Align
+    if (big_laugh_mouth &&
+        !lv_obj_has_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN))
+      lv_obj_align(big_laugh_mouth, LV_ALIGN_CENTER, gaze_x + shake_x,
+                   BIG_MOUTH_OFFSET_Y + shake_y + gaze_y);
+    if (grin_laugh_mouth &&
+        !lv_obj_has_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN))
+      lv_obj_align(grin_laugh_mouth, LV_ALIGN_CENTER, gaze_x + shake_x,
+                   BIG_MOUTH_OFFSET_Y + shake_y + gaze_y);
+
+  } else if (current_emotion == EMO_SLEEP) {
+    float heave = 0;
+    update_sleep_physics(breath_rad, &heave);
+
+    // Apply Mouth Pos (already partly handled in helper but align needs gaze)
+    if (sleep_mouth) {
+      lv_obj_align(sleep_mouth, LV_ALIGN_CENTER, (int16_t)current_gaze_x,
+                   100 + (int16_t)current_gaze_y + (int16_t)(heave * 5.0f));
     }
-  }
 
-  // Happy Idle Animation & Position Update
-  if (current_emotion == EMO_HAPPY) {
-    // 1. Gentle bounce
-    float smile_rad = (float)breath_phase * 0.01745f;
-    int16_t happy_bounce = (int16_t)(4.0f * sinf(smile_rad));
+    // Apply Eye Pos
+    if (left_sleep_eye)
+      lv_obj_align(left_sleep_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X + gaze_x,
+                   breath_offset + gaze_y + 10);
+    if (right_sleep_eye)
+      lv_obj_align(right_sleep_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
+                   breath_offset + gaze_y + 10);
 
-    // 2. DYNAMIC SMILE MORPHING (The "Organic" part)
-    // Smile gets wider and deeper when "inhaling"
-    float smile_intensity = 0.5f + 0.5f * sinf(smile_rad); // 0.0 to 1.0
-    float width = 110.0f + (20.0f * smile_intensity);
-    float depth = 12.0f + (8.0f * smile_intensity);
-    float mid_peak = 6.0f * smile_intensity; // Center point moves up slightly
+  } else if (current_emotion == EMO_ANGRY) {
+    int16_t zoom_val = 256;
 
-    for (int i = 0; i < HAPPY_MOUTH_POINTS; i++) {
-      float t = (float)i / (HAPPY_MOUTH_POINTS - 1); // 0 to 1
-      int16_t x = (int16_t)(t * width);
+    update_angry_physics(timer_ms, &shake_y, &zoom_val);
 
-      // Two-part parabola for the "w" (cat smile) shape
-      float y;
-      if (t < 0.5f) {
-        // Left half parabola: peak at 0.25
-        float dt = (t - 0.25f) / 0.25f;
-        y = depth * (1.0f - dt * dt);
-      } else {
-        // Right half parabola: peak at 0.75
-        float dt = (t - 0.75f) / 0.25f;
-        y = depth * (1.0f - dt * dt);
-      }
+    // SMOOTH BLENDING (Pulse Only)
+    // Cycle: Blue Zoom Pulse (No Red)
+    // Speed increased significantly: approx 4Hz pulse
+    float cycle_speed = 0.025f;
+    float raw_wave = sinf((float)timer_ms * cycle_speed);
 
-      // Blend center to be a bit higher (Omega style)
-      if (t > 0.4f && t < 0.6f) {
-        float mid_t = (t - 0.4f) / 0.1f; // 0 to 2
-        if (mid_t > 1.0f)
-          mid_t = 2.0f - mid_t; // triangle 0->1->0
-        y -= mid_peak * mid_t;
-      }
+    // Sharpen the wave: Make it spend more time at extremes (Pulse)
+    float blend_factor = (raw_wave + 1.0f) * 0.5f;
+    blend_factor = blend_factor * blend_factor; // 0..1 non-linear
 
-      happy_mouth_pts[i].x = x;
-      happy_mouth_pts[i].y = (int16_t)y;
+    // Smooth Zoom Interpolation
+    // Blue Base: 220, Blue Max: 290
+    int16_t current_zoom = 220 + (int16_t)(70.0f * blend_factor);
+
+    // RED EYES DISABLED (Always Hidden/Transparent)
+    if (left_angry_eye) {
+      lv_obj_add_flag(left_angry_eye, LV_OBJ_FLAG_HIDDEN);
     }
+    if (right_angry_eye) {
+      lv_obj_add_flag(right_angry_eye, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // --- BLUE EYES (Always Visible + Pulsing Zoom) ---
+    if (left_angry_blue_eye) {
+      lv_obj_clear_flag(left_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_align(left_angry_blue_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X + gaze_x,
+                   gaze_y + shake_y);
+      lv_img_set_zoom(left_angry_blue_eye, current_zoom);
+      lv_obj_set_style_img_opa(left_angry_blue_eye, 255, 0); // Full Opaque
+    }
+    if (right_angry_blue_eye) {
+      lv_obj_clear_flag(right_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_align(right_angry_blue_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
+                   gaze_y + shake_y);
+      lv_img_set_zoom(right_angry_blue_eye, current_zoom);
+      lv_obj_set_style_img_opa(right_angry_blue_eye, 255, 0); // Full Opaque
+    }
+
+    // --- BLUE MOUTH (Morphing Shape) ---
+    if (angry_blue_mouth) {
+      lv_obj_clear_flag(angry_blue_mouth, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_align(angry_blue_mouth, LV_ALIGN_CENTER, gaze_x,
+                   80 + gaze_y + shake_y);
+
+      // Morph Shape: Clenched (Wide/Short) <-> Scream (Narrow/Tall)
+      // Width: 90 -> 70
+      // Height: 40 -> 80
+      int16_t m_w = 90 - (int16_t)(20.0f * blend_factor);
+      int16_t m_h = 40 + (int16_t)(40.0f * blend_factor);
+      int16_t m_rad = 15 + (int16_t)(15.0f * blend_factor); // Rounder when open
+
+      lv_obj_set_size(angry_blue_mouth, m_w, m_h);
+      lv_obj_set_style_radius(angry_blue_mouth, m_rad, 0);
+
+      // Ensure Reset Zoom (we use Size now)
+      lv_obj_set_style_transform_zoom(angry_blue_mouth, 256, 0);
+      lv_obj_set_style_bg_opa(angry_blue_mouth, 255, 0);
+    }
+
+  } else if (current_emotion == EMO_HAPPY) {
+    int16_t happy_bounce = 0;
+    update_happy_physics(breath_rad, &happy_bounce);
 
     if (happy_mouth) {
-      lv_line_set_points(happy_mouth, happy_mouth_pts, HAPPY_MOUTH_POINTS);
-      lv_obj_align(happy_mouth, LV_ALIGN_CENTER, (int16_t)current_gaze_x,
-                   OMEGA_MOUTH_OFFSET_Y + happy_bounce +
-                       (int16_t)current_gaze_y);
+      lv_obj_align(happy_mouth, LV_ALIGN_CENTER, gaze_x,
+                   OMEGA_MOUTH_OFFSET_Y + happy_bounce + gaze_y);
     }
-
-    // Update Cheeks Position (Bounce with mouth)
     if (left_cheek)
       lv_obj_align(left_cheek, LV_ALIGN_CENTER, -EYE_OFFSET_X + gaze_x,
                    CHEEK_OFFSET_Y_VISIBLE + happy_bounce + gaze_y);
     if (right_cheek)
       lv_obj_align(right_cheek, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
                    CHEEK_OFFSET_Y_VISIBLE + happy_bounce + gaze_y);
-  }
 
-  // Common Eye Update (Re-apply final coords for other components if needed)
-  // (Left/Right eyes already handled at top of function)
+    // Normal Eyes with bounce
+    if (left_eye) {
+      lv_obj_set_size(left_eye, EYE_WIDTH, EYE_HEIGHT); // Reset size
+      lv_obj_align(left_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X + gaze_x,
+                   breath_offset + gaze_y + happy_bounce);
+    }
+    if (right_eye) {
+      lv_obj_set_size(right_eye, EYE_WIDTH, EYE_HEIGHT); // Reset size
+      lv_obj_align(right_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
+                   breath_offset + gaze_y + happy_bounce);
+    }
 
-  // Laugh Eye Update
-  if (left_laugh_eye && right_laugh_eye && current_emotion == EMO_LAUGH) {
-    lv_obj_align(left_laugh_eye, LV_ALIGN_CENTER,
-                 -EYE_OFFSET_X + gaze_x + shake_x - squint_offset,
-                 LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
-    lv_obj_align(right_laugh_eye, LV_ALIGN_CENTER,
-                 EYE_OFFSET_X + gaze_x + shake_x + squint_offset,
-                 LAUGH_EYE_OFFSET_Y + shake_y + gaze_y);
-  }
-
-  // Sleep Eye Position
-  if (current_emotion == EMO_SLEEP) {
-    if (left_sleep_eye)
-      lv_obj_align(left_sleep_eye, LV_ALIGN_CENTER,
-                   -EYE_OFFSET_X + final_gaze_x, breath + final_gaze_y + 10);
-    if (right_sleep_eye)
-      lv_obj_align(right_sleep_eye, LV_ALIGN_CENTER,
-                   EYE_OFFSET_X + final_gaze_x, breath + final_gaze_y + 10);
-  }
-
-  // -----------------------------------------------------------------------------
-  // LOVE Emotion - Romantic Heartbeat Animation
-  // -----------------------------------------------------------------------------
-  if (current_emotion == EMO_LOVE) {
-    // Build up love intensity smoothly
+  } else if (current_emotion == EMO_LOVE) {
     if (love_intensity < 100)
-      love_intensity += 3; // Slower fade in
+      love_intensity += 1; // Slow ramp
     float intensity_scale = love_intensity / 100.0f;
 
-    // Heartbeat phase - realistic heart rhythm
-    heart_beat_phase += 8.0f; // Slower, more romantic pace
-    if (heart_beat_phase >= 360.0f)
-      heart_beat_phase = 0.0f;
-    float beat_rad = heart_beat_phase * 0.01745f;
+    int16_t zoom_val = 256;
+    int16_t float_y = 0;
+    int16_t wobble = 0;
+    update_love_physics(intensity_scale, &zoom_val, &float_y, &wobble);
 
-    // Heartbeat scale pulse (lub-dub rhythm)
-    // Double-beat pattern like real heartbeat
-    float beat_wave = 0.0f;
-    float phase_norm = heart_beat_phase / 360.0f;
-
-    if (phase_norm < 0.12f) {
-      // First beat "LUB" (0-12%) - stronger
-      float t = phase_norm / 0.12f;
-      beat_wave = sinf(t * 3.14159f);
-    } else if (phase_norm < 0.20f) {
-      // Small pause
-      beat_wave = 0.0f;
-    } else if (phase_norm < 0.32f) {
-      // Second beat "DUB" (20-32%) - slightly weaker
-      float t = (phase_norm - 0.20f) / 0.12f;
-      beat_wave = sinf(t * 3.14159f) * 0.65f;
-    }
-    // else: rest of cycle is rest pause (realistic)
-
-    // Smooth the wave
-    beat_wave = beat_wave * beat_wave; // Square for snappier pulse
-
-    // Calculate scale: 256 = 100%, pulse between 100% and 120%
-    float base_zoom = 256.0f;
-    float pulse_amount = 50.0f * intensity_scale; // Max 50 zoom units pulse
-    int16_t heart_zoom = (int16_t)(base_zoom + pulse_amount * beat_wave);
-
-    // Gentle floating animation (dreamy up/down)
-    float float_amount = 6.0f * sinf(beat_rad * 0.3f) * intensity_scale;
-    int16_t float_y = (int16_t)float_amount;
-
-    // Subtle wobble effect (hearts move slightly towards each other)
-    float wobble = 3.0f * sinf(beat_rad * 0.5f) * intensity_scale;
-
-    // Update heart eyes with all effects
     if (left_heart_eye) {
-      lv_img_set_zoom(left_heart_eye, heart_zoom);
       lv_obj_align(left_heart_eye, LV_ALIGN_CENTER,
-                   -HEART_EYE_OFFSET_X + gaze_x + (int16_t)wobble,
-                   float_y + gaze_y);
+                   -HEART_EYE_OFFSET_X + gaze_x - wobble, gaze_y + float_y);
+      lv_img_set_zoom(left_heart_eye, zoom_val);
     }
     if (right_heart_eye) {
-      lv_img_set_zoom(right_heart_eye, heart_zoom);
       lv_obj_align(right_heart_eye, LV_ALIGN_CENTER,
-                   HEART_EYE_OFFSET_X + gaze_x - (int16_t)wobble,
-                   float_y + gaze_y);
+                   HEART_EYE_OFFSET_X + gaze_x + wobble, gaze_y + float_y);
+      lv_img_set_zoom(right_heart_eye, zoom_val);
     }
+
   } else {
-    // Reset love state when not in LOVE emotion
+    // EMO_IDLE or others (Normal)
+    laugh_intensity = 0;
     love_intensity = 0;
+
+    if (left_eye && right_eye &&
+        !lv_obj_has_flag(left_eye, LV_OBJ_FLAG_HIDDEN)) {
+
+      // 1. EMO-LIKE DYNAMIC PHYSICS
+      float deform_factor = 0.4f; // How "jelly-like" the eyes are
+
+      // Base Breath LFO
+      float breath_val = sinf(breath_rad); // -1 to 1
+
+      // 2. Velocity Stretching (Motion Blur effect)
+      // If moving X fast -> Widen, Shorten
+      // If moving Y fast -> Tall, Narrow
+      float stretch_x = 1.0f + (fabsf(gaze_vel_x) * 0.015f * deform_factor);
+      float stretch_y = 1.0f + (fabsf(gaze_vel_y) * 0.015f * deform_factor);
+
+      // Conserve area roughly: If stretching one way, squash the other
+      if (stretch_x > 1.05f)
+        stretch_y *= (1.0f / stretch_x);
+      if (stretch_y > 1.05f)
+        stretch_x *= (1.0f / stretch_y);
+
+      // Combine with Breath
+      int16_t target_w =
+          (int16_t)(EYE_WIDTH * stretch_x) - (int16_t)(6.0f * breath_val);
+      int16_t target_h =
+          (int16_t)(EYE_HEIGHT * stretch_y) + (int16_t)(6.0f * breath_val);
+
+      // Apply SMOOTHING (Lerp)
+      // Faster LERP (0.3) to avoid "drag" feeling, but kept for jitter removal
+      current_eye_w = current_eye_w * 0.7f + ((float)target_w * 0.3f);
+      current_eye_h = current_eye_h * 0.7f + ((float)target_h * 0.3f);
+
+      int16_t final_w = (int16_t)current_eye_w;
+      int16_t final_h = (int16_t)current_eye_h;
+
+      // Optimization: Only update if changed to save FPS
+      if (lv_obj_get_width(left_eye) != final_w ||
+          lv_obj_get_height(left_eye) != final_h) {
+        lv_obj_set_size(left_eye, final_w, final_h);
+        lv_obj_set_size(right_eye, final_w, final_h);
+      }
+
+      // 3. 3D Rolling Effect -> REMOVED for Performance (FPS Drop fix)
+      // Rotation on software renderer is very heavy.
+      // We rely on Squash/Stretch + Position for 3D feel.
+
+      lv_obj_align(left_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X + gaze_x,
+                   breath_offset + gaze_y);
+      lv_obj_align(right_eye, LV_ALIGN_CENTER, EYE_OFFSET_X + gaze_x,
+                   breath_offset + gaze_y);
+
+      // Reset rotation just in case it was set by other modes
+      lv_obj_set_style_transform_angle(left_eye, 0, 0);
+      lv_obj_set_style_transform_angle(right_eye, 0, 0);
+
+      // 4. RANDOM IDLE ACTIONS (Ticks)
+      if (idle_anim_type != IDLE_ACT_NONE) {
+        float act_val = 0.0f;
+        // Simple bell curve 0->1->0 based on phase
+        if (idle_anim_phase < 0.5f)
+          act_val = idle_anim_phase * 2.0f;
+        else
+          act_val = (1.0f - idle_anim_phase) * 2.0f;
+
+        // Smooth sine ease
+        act_val = sinf(act_val * 1.5707f);
+
+        if (idle_anim_type == IDLE_ACT_SQUINT) {
+          // Squint: Shorten height, slightly wider
+          int16_t sq_h = final_h - (int16_t)(40.0f * act_val);
+          int16_t sq_w = final_w + (int16_t)(10.0f * act_val);
+          lv_obj_set_size(left_eye, sq_w, sq_h);
+          lv_obj_set_size(right_eye, sq_w, sq_h);
+        } else if (idle_anim_type == IDLE_ACT_WIDE) {
+          // Surprise: Taller and Wider
+          int16_t wide_h = final_h + (int16_t)(30.0f * act_val);
+          int16_t wide_w = final_w + (int16_t)(20.0f * act_val);
+          lv_obj_set_size(left_eye, wide_w, wide_h);
+          lv_obj_set_size(right_eye, wide_w, wide_h);
+        }
+        // SCAN handled via gaze target in main loop, no deform needed here
+      }
+    }
   }
 }
 
 // -----------------------------------------------------------------------------
-// Animations
+// Animations & Transitions
 // -----------------------------------------------------------------------------
+static void anim_opa_cb(void *var, int32_t v) {
+  lv_obj_set_style_opa((lv_obj_t *)var, v, 0);
+}
+
+static void anim_line_opa_cb(void *var, int32_t v) {
+  lv_obj_set_style_line_opa((lv_obj_t *)var, v, 0);
+}
+
+static void anim_img_opa_cb(void *var, int32_t v) {
+  lv_obj_set_style_img_opa((lv_obj_t *)var, v, 0);
+}
+
+static void fade_out_anim_ready_cb(lv_anim_t *a) {
+  lv_obj_add_flag((lv_obj_t *)a->var, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Fade IN Normal Eyes (if hidden)
+static void fade_in_normal_eyes(void) {
+  if (!left_eye || !right_eye)
+    return;
+
+  // Only fade in if hidden or transparent
+  if (!lv_obj_has_flag(left_eye, LV_OBJ_FLAG_HIDDEN) &&
+      lv_obj_get_style_opa(left_eye, 0) == LV_OPA_COVER)
+    return;
+
+  lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, left_eye);
+  lv_anim_set_values(&a, 0, 255);
+  lv_anim_set_time(&a, 300);
+  lv_anim_set_exec_cb(&a, anim_opa_cb);
+  lv_anim_start(&a);
+
+  lv_anim_set_var(&a, right_eye);
+  lv_anim_start(&a);
+}
+
+// Fade OUT Normal Eyes (if visible)
+static void fade_out_normal_eyes(void) {
+  if (!left_eye || !right_eye)
+    return;
+
+  if (lv_obj_has_flag(left_eye, LV_OBJ_FLAG_HIDDEN))
+    return;
+
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, left_eye);
+  lv_anim_set_values(&a, 255, 0);
+  lv_anim_set_time(&a, 300);
+  lv_anim_set_exec_cb(&a, anim_opa_cb);
+  lv_anim_set_ready_cb(&a, fade_out_anim_ready_cb);
+  lv_anim_start(&a);
+
+  lv_anim_set_var(&a, right_eye);
+  lv_anim_start(&a);
+}
 static void anim_height_cb(void *var, int32_t v) {
   if (left_eye)
     lv_obj_set_height(left_eye, v);
@@ -687,13 +911,6 @@ static void anim_cheek_cb(void *var, int32_t v) {
     lv_obj_align(right_cheek, LV_ALIGN_CENTER, EYE_OFFSET_X, v);
 }
 
-// Animation happy mouth opacity
-static void anim_happy_mouth_opa_cb(void *var, int32_t v) {
-  if (happy_mouth) {
-    lv_obj_set_style_line_opa(happy_mouth, v, 0);
-  }
-}
-
 // Animation happy mouth Y position (slide up)
 static void anim_happy_mouth_y_cb(void *var, int32_t v) {
   if (happy_mouth) {
@@ -702,6 +919,18 @@ static void anim_happy_mouth_y_cb(void *var, int32_t v) {
 }
 
 static void show_happy(void) {
+  fade_in_normal_eyes(); // Ensure eyes are visible
+
+  // Squint Eyes for "Smizing" effect
+  lv_anim_t h;
+  lv_anim_init(&h);
+  lv_anim_set_var(&h, NULL);               // Var ignored by anim_height_cb
+  lv_anim_set_values(&h, EYE_HEIGHT, 140); // 190 -> 140 (Squint)
+  lv_anim_set_time(&h, 300);
+  lv_anim_set_exec_cb(&h, anim_height_cb);
+  lv_anim_set_path_cb(&h, lv_anim_path_ease_out);
+  lv_anim_start(&h);
+
   lv_anim_t a;
   lv_anim_init(&a);
   lv_anim_set_var(&a, NULL);
@@ -719,10 +948,10 @@ static void show_happy(void) {
     // Opacity
     lv_anim_t b;
     lv_anim_init(&b);
-    lv_anim_set_var(&b, NULL);
+    lv_anim_set_var(&b, happy_mouth); // Fix: Var is object
     lv_anim_set_values(&b, LV_OPA_TRANSP, LV_OPA_COVER);
     lv_anim_set_time(&b, 300);
-    lv_anim_set_exec_cb(&b, anim_happy_mouth_opa_cb);
+    lv_anim_set_exec_cb(&b, anim_line_opa_cb); // Use Line specific
     lv_anim_set_path_cb(&b, lv_anim_path_ease_in);
     lv_anim_start(&b);
 
@@ -744,6 +973,16 @@ static void hide_happy_anim_done(lv_anim_t *a) {
 }
 
 static void hide_happy(void) {
+  // Un-squint Eyes (Return to open)
+  lv_anim_t h;
+  lv_anim_init(&h);
+  lv_anim_set_var(&h, NULL);
+  lv_anim_set_values(&h, 140, EYE_HEIGHT); // 140 -> 190
+  lv_anim_set_time(&h, 300);
+  lv_anim_set_exec_cb(&h, anim_height_cb);
+  lv_anim_set_path_cb(&h, lv_anim_path_ease_in);
+  lv_anim_start(&h);
+
   lv_anim_t a;
   lv_anim_init(&a);
   lv_anim_set_var(&a, NULL);
@@ -758,10 +997,10 @@ static void hide_happy(void) {
     // Opacity
     lv_anim_t b;
     lv_anim_init(&b);
-    lv_anim_set_var(&b, NULL);
+    lv_anim_set_var(&b, happy_mouth);
     lv_anim_set_values(&b, LV_OPA_COVER, LV_OPA_TRANSP);
     lv_anim_set_time(&b, 200);
-    lv_anim_set_exec_cb(&b, anim_happy_mouth_opa_cb);
+    lv_anim_set_exec_cb(&b, anim_line_opa_cb);
     lv_anim_set_ready_cb(&b, hide_happy_anim_done);
     lv_anim_start(&b);
 
@@ -839,6 +1078,8 @@ static void start_tear_anim(lv_obj_t *tear, uint32_t delay) {
 }
 
 static void show_sad(void) {
+  fade_in_normal_eyes();
+
   lv_anim_t a;
   lv_anim_init(&a);
   lv_anim_set_var(&a, NULL);
@@ -882,13 +1123,6 @@ static void hide_sad(void) {
   }
 }
 
-// Animation callbacks for laugh transition
-static void anim_big_mouth_opa_cb(void *var, int32_t v) {
-  if (big_laugh_mouth) {
-    lv_obj_set_style_bg_opa(big_laugh_mouth, v, 0);
-  }
-}
-
 static void anim_laugh_eye_scale_cb(void *var, int32_t v) {
   // Scale the line style width to create squint effect
   if (left_laugh_eye)
@@ -903,20 +1137,38 @@ static void show_laugh(void) {
   laugh_cycle = 0;
   laugh_shake_phase = 0;
 
-  // Hide normal eyes
-  if (left_eye)
-    lv_obj_add_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
-  if (right_eye)
-    lv_obj_add_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+  fade_out_normal_eyes(); // Fade out normal eyes smoothly
 
   // Show laugh eyes with animation
   if (left_laugh_eye) {
     lv_obj_set_style_line_width(left_laugh_eye, 4, 0); // Start thin
+    lv_obj_set_style_line_opa(left_laugh_eye, LV_OPA_TRANSP,
+                              0); // Correct property (was opa)
     lv_obj_clear_flag(left_laugh_eye, LV_OBJ_FLAG_HIDDEN);
+
+    // Fade In Left
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, left_laugh_eye);
+    lv_anim_set_values(&a, 0, 255);
+    lv_anim_set_time(&a, 300);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb); // Line
+    lv_anim_start(&a);
   }
   if (right_laugh_eye) {
     lv_obj_set_style_line_width(right_laugh_eye, 4, 0);
+    lv_obj_set_style_line_opa(right_laugh_eye, LV_OPA_TRANSP,
+                              0); // Correct property
     lv_obj_clear_flag(right_laugh_eye, LV_OBJ_FLAG_HIDDEN);
+
+    // Fade In Right
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, right_laugh_eye);
+    lv_anim_set_values(&a, 0, 255);
+    lv_anim_set_time(&a, 300);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb); // Line
+    lv_anim_start(&a);
   }
 
   // Animate eyes getting thicker (squint effect)
@@ -924,7 +1176,7 @@ static void show_laugh(void) {
   lv_anim_init(&eye_anim);
   lv_anim_set_var(&eye_anim, NULL);
   lv_anim_set_values(&eye_anim, 4, 14);
-  lv_anim_set_time(&eye_anim, 200);
+  lv_anim_set_time(&eye_anim, 200); // Wait for fade a bit?
   lv_anim_set_exec_cb(&eye_anim, anim_laugh_eye_scale_cb);
   lv_anim_set_path_cb(&eye_anim, lv_anim_path_overshoot);
   lv_anim_start(&eye_anim);
@@ -936,10 +1188,10 @@ static void show_laugh(void) {
 
     lv_anim_t mouth_anim;
     lv_anim_init(&mouth_anim);
-    lv_anim_set_var(&mouth_anim, NULL);
+    lv_anim_set_var(&mouth_anim, big_laugh_mouth); // Fix Var
     lv_anim_set_values(&mouth_anim, LV_OPA_TRANSP, LV_OPA_COVER);
     lv_anim_set_time(&mouth_anim, 300);
-    lv_anim_set_exec_cb(&mouth_anim, anim_big_mouth_opa_cb);
+    lv_anim_set_exec_cb(&mouth_anim, anim_opa_cb); // Generic
     lv_anim_set_path_cb(&mouth_anim, lv_anim_path_ease_in);
     lv_anim_start(&mouth_anim);
   }
@@ -954,13 +1206,8 @@ static void laugh_exit_anim_done(lv_anim_t *a) {
   if (big_laugh_mouth)
     lv_obj_add_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
 
-  // Show normal eyes ONLY if not transitioning to special emotions
-  if (current_emotion != EMO_LOVE && current_emotion != EMO_SLEEP) {
-    if (left_eye)
-      lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
-    if (right_eye)
-      lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
-  }
+  // NOTE: We do NOT restore Normal eyes here anymore.
+  // The next emotion's show function handles that.
 }
 
 static void hide_laugh(void) {
@@ -968,10 +1215,10 @@ static void hide_laugh(void) {
   if (big_laugh_mouth) {
     lv_anim_t mouth_anim;
     lv_anim_init(&mouth_anim);
-    lv_anim_set_var(&mouth_anim, NULL);
+    lv_anim_set_var(&mouth_anim, big_laugh_mouth);
     lv_anim_set_values(&mouth_anim, LV_OPA_COVER, LV_OPA_TRANSP);
     lv_anim_set_time(&mouth_anim, 200);
-    lv_anim_set_exec_cb(&mouth_anim, anim_big_mouth_opa_cb);
+    lv_anim_set_exec_cb(&mouth_anim, anim_opa_cb);
     lv_anim_set_ready_cb(&mouth_anim, laugh_exit_anim_done);
     lv_anim_set_path_cb(&mouth_anim, lv_anim_path_ease_in);
     lv_anim_start(&mouth_anim);
@@ -982,20 +1229,54 @@ static void hide_laugh(void) {
   if (grin_laugh_mouth)
     lv_obj_add_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
 
-  // Animate eyes getting thinner
-  lv_anim_t eye_anim;
-  lv_anim_init(&eye_anim);
-  lv_anim_set_var(&eye_anim, NULL);
-  lv_anim_set_values(&eye_anim, 14, 4);
-  lv_anim_set_time(&eye_anim, 200);
-  lv_anim_set_exec_cb(&eye_anim, anim_laugh_eye_scale_cb);
-  lv_anim_set_path_cb(&eye_anim, lv_anim_path_ease_in);
-  lv_anim_start(&eye_anim);
+  // Fade out Eyes
+  if (left_laugh_eye) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, left_laugh_eye);
+    lv_anim_set_values(&a, 255, 0);
+    lv_anim_set_time(&a, 200);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb);
+    lv_anim_start(&a);
+  }
+  if (right_laugh_eye) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, right_laugh_eye);
+    lv_anim_set_values(&a, 255, 0);
+    lv_anim_set_time(&a, 200);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb);
+    lv_anim_start(&a);
+  }
 }
 
 // -----------------------------------------------------------------------------
-// LOVE Emotion - Heart Eyes with Heartbeat Animation
+// ANGRY Emotion - Sharp glare and Trembling
 // -----------------------------------------------------------------------------
+static void show_angry(void) {
+  fade_out_normal_eyes();
+
+  // Red eyes removed - ensure hidden
+  if (left_angry_eye)
+    lv_obj_add_flag(left_angry_eye, LV_OBJ_FLAG_HIDDEN);
+  if (right_angry_eye)
+    lv_obj_add_flag(right_angry_eye, LV_OBJ_FLAG_HIDDEN);
+
+  // Directly show Blue Eyes/Mouth (Fade In can be added if needed, but pulsing
+  // starts immediately) For now, let update_positions handle the
+  // visibility/opacity to avoid conflict
+}
+
+static void hide_angry(void) {
+  // Hide Blue components
+  if (left_angry_blue_eye)
+    lv_obj_add_flag(left_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+  if (right_angry_blue_eye)
+    lv_obj_add_flag(right_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+  if (angry_blue_mouth)
+    lv_obj_add_flag(angry_blue_mouth, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void anim_heart_scale_cb(void *var, int32_t v) {
   // Scale both heart eyes together
   int16_t size = (int16_t)v;
@@ -1007,42 +1288,12 @@ static void anim_heart_scale_cb(void *var, int32_t v) {
   }
 }
 
-static void anim_heart_opa_cb(void *var, int32_t v) {
-  if (left_heart_eye) {
-    lv_obj_set_style_img_opa(left_heart_eye, v, 0);
-  }
-  if (right_heart_eye) {
-    lv_obj_set_style_img_opa(right_heart_eye, v, 0);
-  }
-}
-
-static void love_exit_anim_done(lv_anim_t *a) {
-  // Hide heart eyes after animation
-  if (left_heart_eye)
-    lv_obj_add_flag(left_heart_eye, LV_OBJ_FLAG_HIDDEN);
-  if (right_heart_eye)
-    lv_obj_add_flag(right_heart_eye, LV_OBJ_FLAG_HIDDEN);
-
-  // Show normal eyes ONLY if not in a special emotion state
-  if (current_emotion != EMO_SLEEP && current_emotion != EMO_LAUGH &&
-      current_emotion != EMO_LOVE) {
-    if (left_eye)
-      lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
-    if (right_eye)
-      lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
-  }
-}
-
 static void show_love(void) {
   // Reset love state
   love_intensity = 0;
   heart_beat_phase = 0.0f;
 
-  // Hide normal eyes
-  if (left_eye)
-    lv_obj_add_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
-  if (right_eye)
-    lv_obj_add_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+  fade_out_normal_eyes();
 
   // Show heart eyes with fade-in animation
   if (left_heart_eye) {
@@ -1059,11 +1310,14 @@ static void show_love(void) {
   // Animate opacity (fade in)
   lv_anim_t opa_anim;
   lv_anim_init(&opa_anim);
-  lv_anim_set_var(&opa_anim, NULL);
+  lv_anim_set_var(&opa_anim, left_heart_eye); // Fix var
   lv_anim_set_values(&opa_anim, LV_OPA_TRANSP, LV_OPA_COVER);
   lv_anim_set_time(&opa_anim, 300);
-  lv_anim_set_exec_cb(&opa_anim, anim_heart_opa_cb);
+  lv_anim_set_exec_cb(&opa_anim, anim_img_opa_cb); // Use Image Opa
   lv_anim_set_path_cb(&opa_anim, lv_anim_path_ease_out);
+  lv_anim_start(&opa_anim);
+
+  lv_anim_set_var(&opa_anim, right_heart_eye);
   lv_anim_start(&opa_anim);
 
   // Animate scale (pop in effect)
@@ -1078,25 +1332,17 @@ static void show_love(void) {
 }
 
 static void hide_love(void) {
-  // Fade out hearts
-  lv_anim_t opa_anim;
-  lv_anim_init(&opa_anim);
-  lv_anim_set_var(&opa_anim, NULL);
-  lv_anim_set_values(&opa_anim, LV_OPA_COVER, LV_OPA_TRANSP);
-  lv_anim_set_time(&opa_anim, 200);
-  lv_anim_set_exec_cb(&opa_anim, anim_heart_opa_cb);
-  lv_anim_set_ready_cb(&opa_anim, love_exit_anim_done);
-  lv_anim_set_path_cb(&opa_anim, lv_anim_path_ease_in);
-  lv_anim_start(&opa_anim);
-
-  lv_anim_t scale_anim;
-  lv_anim_init(&scale_anim);
-  lv_anim_set_var(&scale_anim, NULL);
-  lv_anim_set_values(&scale_anim, 280, 180); // 110% to 70%
-  lv_anim_set_time(&scale_anim, 200);
-  lv_anim_set_exec_cb(&scale_anim, anim_heart_scale_cb);
-  lv_anim_set_path_cb(&scale_anim, lv_anim_path_ease_in);
-  lv_anim_start(&scale_anim);
+  // Hide hearts immediately to prevent bleeding into Sleep screen
+  if (left_heart_eye) {
+    lv_anim_del(left_heart_eye, anim_img_opa_cb);
+    lv_anim_del(left_heart_eye, anim_heart_scale_cb);
+    lv_obj_add_flag(left_heart_eye, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (right_heart_eye) {
+    lv_anim_del(right_heart_eye, anim_img_opa_cb);
+    // Scale anim var was NULL in start, but best to just force hide
+    lv_obj_add_flag(right_heart_eye, LV_OBJ_FLAG_HIDDEN);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -1154,15 +1400,33 @@ static void start_z_anim(lv_obj_t *z, uint32_t delay) {
 }
 
 static void show_sleep(void) {
-  if (left_eye)
-    lv_obj_add_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
-  if (right_eye)
-    lv_obj_add_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+  fade_out_normal_eyes();
 
-  if (left_sleep_eye)
+  if (left_sleep_eye) {
+    lv_obj_set_style_line_opa(left_sleep_eye, LV_OPA_TRANSP, 0);
     lv_obj_clear_flag(left_sleep_eye, LV_OBJ_FLAG_HIDDEN);
-  if (right_sleep_eye)
+
+    // Fade In
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, left_sleep_eye);
+    lv_anim_set_values(&a, 0, 255);
+    lv_anim_set_time(&a, 400);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb);
+    lv_anim_start(&a);
+  }
+  if (right_sleep_eye) {
+    lv_obj_set_style_line_opa(right_sleep_eye, LV_OPA_TRANSP, 0);
     lv_obj_clear_flag(right_sleep_eye, LV_OBJ_FLAG_HIDDEN);
+
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, right_sleep_eye);
+    lv_anim_set_values(&a, 0, 255);
+    lv_anim_set_time(&a, 400);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb);
+    lv_anim_start(&a);
+  }
   if (sleep_mouth)
     lv_obj_clear_flag(sleep_mouth, LV_OBJ_FLAG_HIDDEN);
 
@@ -1180,10 +1444,27 @@ static void show_sleep(void) {
 }
 
 static void hide_sleep(void) {
-  if (left_sleep_eye)
-    lv_obj_add_flag(left_sleep_eye, LV_OBJ_FLAG_HIDDEN);
-  if (right_sleep_eye)
-    lv_obj_add_flag(right_sleep_eye, LV_OBJ_FLAG_HIDDEN);
+  if (left_sleep_eye) {
+    // Fade Out
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, left_sleep_eye);
+    lv_anim_set_values(&a, 255, 0);
+    lv_anim_set_time(&a, 250);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb);
+    lv_anim_set_ready_cb(&a, fade_out_anim_ready_cb);
+    lv_anim_start(&a);
+  }
+  if (right_sleep_eye) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, right_sleep_eye);
+    lv_anim_set_values(&a, 255, 0);
+    lv_anim_set_time(&a, 250);
+    lv_anim_set_exec_cb(&a, anim_line_opa_cb);
+    lv_anim_set_ready_cb(&a, fade_out_anim_ready_cb);
+    lv_anim_start(&a);
+  }
   if (sleep_mouth)
     lv_obj_add_flag(sleep_mouth, LV_OBJ_FLAG_HIDDEN);
 
@@ -1200,41 +1481,128 @@ static void hide_sleep(void) {
     lv_obj_add_flag(sleep_z3, LV_OBJ_FLAG_HIDDEN);
   }
 
-  if (current_emotion != EMO_LAUGH && current_emotion != EMO_LOVE) {
-    if (left_eye)
-      lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
-    if (right_eye)
-      lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+  if (sleep_z3) {
+    lv_anim_del(sleep_z3, anim_z_cb);
+    lv_obj_add_flag(sleep_z3, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
-static void gesture_event_cb(lv_event_t *e) {
-  lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
-  if (dir == LV_DIR_TOP)
-    ui_settings_show();
+static void show_idle(void) { fade_in_normal_eyes(); }
+
+static void switch_to_next_emotion(void) {
+  // Logic to switch to next emotion
+  switch (current_emotion) {
+  case EMO_IDLE:
+    show_happy();
+    current_emotion = EMO_HAPPY;
+    break;
+  case EMO_HAPPY:
+    hide_happy();
+    show_sad();
+    current_emotion = EMO_SAD;
+    break;
+  case EMO_SAD:
+    hide_sad();
+    show_laugh();
+    current_emotion = EMO_LAUGH;
+    break;
+  case EMO_LAUGH:
+    hide_laugh();
+    show_love();
+    current_emotion = EMO_LOVE;
+    break;
+  case EMO_LOVE:
+    hide_love();
+    show_sleep();
+    current_emotion = EMO_SLEEP;
+    break;
+  case EMO_SLEEP:
+    hide_sleep();
+    show_angry();
+    current_emotion = EMO_ANGRY;
+    break;
+  case EMO_ANGRY:
+    hide_angry();
+    show_idle(); // Restore normal state
+    current_emotion = EMO_IDLE;
+    break;
+  }
+  timer_ms = 0; // Reset timer just in case
+}
+
+static void scr_event_cb(lv_event_t *e) {
+  lv_event_code_t code = lv_event_get_code(e);
+
+  if (code == LV_EVENT_GESTURE) {
+    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
+    if (dir == LV_DIR_TOP)
+      ui_settings_show();
+  } else if (code == LV_EVENT_CLICKED) {
+    // Switch emotion on tap
+    switch_to_next_emotion();
+  }
 }
 
 static void main_loop(lv_timer_t *timer) {
   update_positions();
-  timer_ms += 50;
+  timer_ms += 16; // 60 FPS update
 
   // Saccade Update (Random micro-movements)
   // Only create saccades in IDLE or HAPPY to mimic looking around
   if (current_emotion == EMO_IDLE || current_emotion == EMO_HAPPY) {
-    saccade_timer += 50;
-    if (saccade_timer >= next_saccade_time) {
-      saccade_timer = 0;
-      // Pick next time: 0.5s to 3s
-      next_saccade_time = 500 + (rand() % 2500);
-
-      // Random tiny offset (-15 to 15)
-      int16_t rand_x = (rand() % 31) - 15;
-      int16_t rand_y = (rand() % 21) - 10;
-
-      // Apply to target
-      target_gaze_x = (float)rand_x;
-      target_gaze_y = (float)rand_y;
+    if (idle_anim_type == IDLE_ACT_NONE) { // Don't interrupt special acts
+      saccade_timer += 50;
+      if (saccade_timer >= next_saccade_time) {
+        saccade_timer = 0;
+        next_saccade_time = 500 + (rand() % 2500);
+        int16_t rand_x = (rand() % 31) - 15;
+        int16_t rand_y = (rand() % 21) - 10;
+        target_gaze_x = (float)rand_x;
+        target_gaze_y = (float)rand_y;
+      }
     }
+  }
+
+  // IDLE TICKS (Squint, Wide, etc.) - Only in IDLE mode
+  if (current_emotion == EMO_IDLE) {
+    if (idle_anim_type == IDLE_ACT_NONE) {
+      idle_anim_timer += 50;
+      if (idle_anim_timer >= next_idle_anim_time) {
+        idle_anim_timer = 0;
+        next_idle_anim_time = 3000 + (rand() % 5000); // Rare events
+
+        // Pick Random Action
+        int r = rand() % 100;
+        if (r < 30)
+          idle_anim_type = IDLE_ACT_SQUINT;
+        else if (r < 50)
+          idle_anim_type = IDLE_ACT_WIDE;
+        else if (r < 70) {
+          idle_anim_type = IDLE_ACT_SCAN;
+          // Trigger scan movement
+          target_gaze_x = -60.0f; // Look Left
+        }
+        idle_anim_phase = 0.0f;
+      }
+    } else {
+      // Process Active Animation
+      idle_anim_phase += 0.05f; // Speed of tick
+
+      // Scan Logic Special
+      if (idle_anim_type == IDLE_ACT_SCAN) {
+        if (idle_anim_phase > 0.3f && idle_anim_phase < 0.35f)
+          target_gaze_x = 60.0f; // Look Right
+        if (idle_anim_phase > 0.7f && idle_anim_phase < 0.75f)
+          target_gaze_x = 0.0f; // Look Center
+      }
+
+      if (idle_anim_phase >= 1.0f) {
+        idle_anim_type = IDLE_ACT_NONE;
+        idle_anim_phase = 0.0f;
+      }
+    }
+  } else {
+    idle_anim_type = IDLE_ACT_NONE; // Reset if switched away
   }
 
   // Random Blink
@@ -1254,54 +1622,34 @@ static void main_loop(lv_timer_t *timer) {
     }
   }
 
+  // Automatic emotion switching with VARIABLE DURATION
+  int duration_ms = 2000; // Default
   switch (current_emotion) {
   case EMO_IDLE:
-    if (timer_ms >= 10000) { // Slower emotion switch
-      show_happy();
-      current_emotion = EMO_HAPPY;
-      timer_ms = 0;
-    }
+    duration_ms = 1500; // Reduced from 2000
     break;
   case EMO_HAPPY:
-    if (timer_ms >= 5000) {
-      hide_happy();
-      show_sad();
-      current_emotion = EMO_SAD;
-      timer_ms = 0;
-    }
+    duration_ms = 2000; // Reduced from 3000
     break;
   case EMO_SAD:
-    if (timer_ms >= 4000) {
-      hide_sad();
-      show_laugh();
-      current_emotion = EMO_LAUGH;
-      timer_ms = 0;
-    }
+    duration_ms = 2000; // Reduced from 3000
     break;
   case EMO_LAUGH:
-    if (timer_ms >= 4000) {
-      hide_laugh();
-      show_love();
-      current_emotion = EMO_LOVE;
-      timer_ms = 0;
-    }
+    duration_ms = 2000; // Reduced from 3000
     break;
   case EMO_LOVE:
-    // Heartbeat animation runs in update_positions()
-    if (timer_ms >= 4000) {
-      hide_love();
-      show_sleep();
-      current_emotion = EMO_SLEEP;
-      timer_ms = 0;
-    }
+    duration_ms = 2500; // Reduced from 4000
     break;
   case EMO_SLEEP:
-    if (timer_ms >= 8000) {
-      hide_sleep();
-      current_emotion = EMO_IDLE;
-      timer_ms = 0;
-    }
+    duration_ms = 3000; // Reduced from 5000
     break;
+  case EMO_ANGRY:
+    duration_ms = 2000; // Reduced from 3000
+    break;
+  }
+
+  if (timer_ms >= duration_ms) {
+    switch_to_next_emotion();
   }
 }
 
@@ -1351,6 +1699,236 @@ static lv_obj_t *create_tear_image(lv_obj_t *parent) {
   return img;
 }
 
+// Draw Left Angry Eye (White Bold Crescent)
+static lv_obj_t *create_left_angry_eye_image(lv_obj_t *parent) {
+  static lv_obj_t *canvas_angry_ref = NULL;
+  if (canvas_angry_ref == NULL) {
+    // Canvas size
+    int w = 200;
+    int h = 200;
+
+    size_t buf_size = LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(w, h);
+    void *cbuf = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM);
+    canvas_angry_ref = lv_canvas_create(lv_scr_act());
+    lv_canvas_set_buffer(canvas_angry_ref, cbuf, w, h,
+                         LV_IMG_CF_TRUE_COLOR_ALPHA);
+    lv_canvas_fill_bg(canvas_angry_ref, lv_color_make(0, 0, 0), LV_OPA_TRANSP);
+
+    // 1. White Base Circle
+    lv_draw_rect_dsc_t base_dsc;
+    lv_draw_rect_dsc_init(&base_dsc);
+    base_dsc.bg_color = lv_color_hex(0xFF0000); // Red
+    base_dsc.bg_opa = LV_OPA_COVER;
+    base_dsc.radius = LV_RADIUS_CIRCLE;
+
+    // Position: Center-ish
+    // Box: x,y,w,h.
+    int base_size = 130;
+    int base_x = 20;
+    int base_y = 50;
+    lv_canvas_draw_rect(canvas_angry_ref, base_x, base_y, base_size, base_size,
+                        &base_dsc);
+
+    // 2. Black Mask Circle (To cut out the top-inner part)
+    // Left Eye: Inner is Right. Top-Right needs to be cut.
+    lv_draw_rect_dsc_t mask_dsc;
+    lv_draw_rect_dsc_init(&mask_dsc);
+    mask_dsc.bg_color = lv_color_hex(0x000000); // Black to hide
+    mask_dsc.bg_opa = LV_OPA_COVER;
+    mask_dsc.radius = LV_RADIUS_CIRCLE;
+
+    int mask_size = 140; // Slightly larger mask
+    // Shift Right (Logic: Cut inner side) and Up (Logic: Angry brow)
+    int mask_x = base_x + 40;
+    int mask_y = base_y - 45;
+    lv_canvas_draw_rect(canvas_angry_ref, mask_x, mask_y, mask_size, mask_size,
+                        &mask_dsc);
+
+    lv_obj_add_flag(canvas_angry_ref, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  lv_obj_t *img = lv_img_create(parent);
+  lv_img_set_src(img, lv_canvas_get_img(canvas_angry_ref));
+  lv_obj_set_style_img_recolor_opa(img, LV_OPA_TRANSP, 0);
+  lv_img_set_antialias(img, true);
+  return img;
+}
+
+// Draw Right Angry Eye (White Bold Crescent - Mirrored)
+static lv_obj_t *create_right_angry_eye_image(lv_obj_t *parent) {
+  static lv_obj_t *canvas_angry_right_ref = NULL;
+  if (canvas_angry_right_ref == NULL) {
+    int w = 200;
+    int h = 200;
+
+    size_t buf_size = LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(w, h);
+    void *cbuf = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM);
+    canvas_angry_right_ref = lv_canvas_create(lv_scr_act());
+    lv_canvas_set_buffer(canvas_angry_right_ref, cbuf, w, h,
+                         LV_IMG_CF_TRUE_COLOR_ALPHA);
+    lv_canvas_fill_bg(canvas_angry_right_ref, lv_color_make(0, 0, 0),
+                      LV_OPA_TRANSP);
+
+    // 1. White Base Circle
+    lv_draw_rect_dsc_t base_dsc;
+    lv_draw_rect_dsc_init(&base_dsc);
+    base_dsc.bg_color = lv_color_hex(0xFF0000); // Red
+    base_dsc.bg_opa = LV_OPA_COVER;
+    base_dsc.radius = LV_RADIUS_CIRCLE;
+
+    int base_size = 130;
+    int base_x = 50; // Shifted right slightly compared to left eye box? No,
+                     // mirror logic.
+    // Left eye was at 20. Total width 200.
+    // Let's keep it symmetric in its own box.
+    base_x = 50;
+    int base_y = 50;
+    lv_canvas_draw_rect(canvas_angry_right_ref, base_x, base_y, base_size,
+                        base_size, &base_dsc);
+
+    // 2. Black Mask Circle
+    // Right Eye: Inner is Left. Top-Left needs to be cut.
+    lv_draw_rect_dsc_t mask_dsc;
+    lv_draw_rect_dsc_init(&mask_dsc);
+    mask_dsc.bg_color = lv_color_hex(0x000000);
+    mask_dsc.bg_opa = LV_OPA_COVER;
+    mask_dsc.radius = LV_RADIUS_CIRCLE;
+
+    int mask_size = 140;
+    // Shift Left (Cut inner) and Up (Angry brow)
+    int mask_x = base_x - 50;
+    int mask_y = base_y - 45;
+    lv_canvas_draw_rect(canvas_angry_right_ref, mask_x, mask_y, mask_size,
+                        mask_size, &mask_dsc);
+
+    lv_obj_add_flag(canvas_angry_right_ref, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  lv_obj_t *img = lv_img_create(parent);
+  lv_img_set_src(img, lv_canvas_get_img(canvas_angry_right_ref));
+  lv_obj_set_style_img_recolor_opa(img, LV_OPA_TRANSP, 0);
+  lv_img_set_antialias(img, true); // AA Enabled
+  return img;
+}
+
+// -----------------------------------------------------------------------------
+// BLUE ANGRY VARIANTS (Frame 2)
+// -----------------------------------------------------------------------------
+static lv_obj_t *create_left_angry_blue_eye_image(lv_obj_t *parent) {
+  static lv_obj_t *canvas_angry_blue_ref = NULL;
+  if (canvas_angry_blue_ref == NULL) {
+    int w = 200;
+    int h = 200;
+    size_t buf_size = LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(w, h);
+    void *cbuf = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM);
+    canvas_angry_blue_ref = lv_canvas_create(lv_scr_act());
+    lv_canvas_set_buffer(canvas_angry_blue_ref, cbuf, w, h,
+                         LV_IMG_CF_TRUE_COLOR_ALPHA);
+    lv_canvas_fill_bg(canvas_angry_blue_ref, lv_color_make(0, 0, 0),
+                      LV_OPA_TRANSP);
+
+    // 1. CYAN Base Circle (The U-shape body)
+    lv_draw_rect_dsc_t base_dsc;
+    lv_draw_rect_dsc_init(&base_dsc);
+    base_dsc.bg_color = lv_color_hex(0x00FFFF); // Cyan
+    base_dsc.bg_opa = LV_OPA_COVER;
+    base_dsc.radius = 40;
+
+    int base_w = 120;
+    int base_h = 70;
+    int base_x = 40;
+    int base_y = 65;
+    lv_canvas_draw_rect(canvas_angry_blue_ref, base_x, base_y, base_w, base_h,
+                        &base_dsc);
+
+    // 2. Black Mask Rect (To cut the top flat and slanted)
+    // Left Eye: Slants DOWN towards center ( \ )
+    lv_draw_rect_dsc_t mask_dsc;
+    lv_draw_rect_dsc_init(&mask_dsc);
+    mask_dsc.bg_color = lv_color_hex(0x000000);
+    mask_dsc.bg_opa = LV_OPA_COVER;
+
+    // Use a polygon for the slanted cut
+    // Points: Top-Left, Top-Right(lower), Bottom-Right(lower)
+    lv_point_t mask_pts[4];
+    mask_pts[0].x = 0;
+    mask_pts[0].y = 0;
+    mask_pts[1].x = 200;
+    mask_pts[1].y = 0;
+    mask_pts[2].x = 200;
+    mask_pts[2].y = 95; // Deep cut inner (Right side of left eye canvas)
+    mask_pts[3].x = 0;
+    mask_pts[3].y = 65; // Shallow cut outer (Left side)
+
+    lv_canvas_draw_polygon(canvas_angry_blue_ref, mask_pts, 4, &mask_dsc);
+
+    lv_obj_add_flag(canvas_angry_blue_ref, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  lv_obj_t *img = lv_img_create(parent);
+  lv_img_set_src(img, lv_canvas_get_img(canvas_angry_blue_ref));
+  lv_obj_set_style_img_recolor_opa(img, LV_OPA_TRANSP, 0);
+  lv_img_set_antialias(img, true);
+  return img;
+}
+
+static lv_obj_t *create_right_angry_blue_eye_image(lv_obj_t *parent) {
+  static lv_obj_t *canvas_angry_blue_right_ref = NULL;
+  if (canvas_angry_blue_right_ref == NULL) {
+    int w = 200;
+    int h = 200;
+    size_t buf_size = LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(w, h);
+    void *cbuf = heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM);
+    canvas_angry_blue_right_ref = lv_canvas_create(lv_scr_act());
+    lv_canvas_set_buffer(canvas_angry_blue_right_ref, cbuf, w, h,
+                         LV_IMG_CF_TRUE_COLOR_ALPHA);
+    lv_canvas_fill_bg(canvas_angry_blue_right_ref, lv_color_make(0, 0, 0),
+                      LV_OPA_TRANSP);
+
+    // 1. CYAN Base Circle (The U-shape body)
+    lv_draw_rect_dsc_t base_dsc;
+    lv_draw_rect_dsc_init(&base_dsc);
+    base_dsc.bg_color = lv_color_hex(0x00FFFF); // Cyan
+    base_dsc.bg_opa = LV_OPA_COVER;
+    base_dsc.radius = 40;
+
+    int base_w = 120;
+    int base_h = 70;
+    int base_x = 40;
+    int base_y = 65;
+    lv_canvas_draw_rect(canvas_angry_blue_right_ref, base_x, base_y, base_w,
+                        base_h, &base_dsc);
+
+    // 2. Slanted Mask (Mirrored)
+    // Right Eye: Slant DOWN to Left ( / )
+    lv_draw_rect_dsc_t mask_dsc;
+    lv_draw_rect_dsc_init(&mask_dsc);
+    mask_dsc.bg_color = lv_color_hex(0x000000);
+    mask_dsc.bg_opa = LV_OPA_COVER;
+
+    // Cut deeper on Left (Inner)
+    lv_point_t mask_pts[4];
+    mask_pts[0].x = 0;
+    mask_pts[0].y = 0;
+    mask_pts[1].x = 200;
+    mask_pts[1].y = 0;
+    mask_pts[2].x = 200;
+    mask_pts[2].y = 65; // Shallow cut outer
+    mask_pts[3].x = 0;
+    mask_pts[3].y = 95; // Deep cut inner
+
+    lv_canvas_draw_polygon(canvas_angry_blue_right_ref, mask_pts, 4, &mask_dsc);
+
+    lv_obj_add_flag(canvas_angry_blue_right_ref, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  lv_obj_t *img = lv_img_create(parent);
+  lv_img_set_src(img, lv_canvas_get_img(canvas_angry_blue_right_ref));
+  lv_obj_set_style_img_recolor_opa(img, LV_OPA_TRANSP, 0);
+  lv_img_set_antialias(img, true);
+  return img;
+}
+
 void ui_robo_eyes_init(void) {
   if (scr_eyes)
     return;
@@ -1360,7 +1938,8 @@ void ui_robo_eyes_init(void) {
   lv_obj_set_style_bg_opa(scr_eyes, LV_OPA_COVER, 0);
   lv_obj_clear_flag(scr_eyes, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(scr_eyes, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(scr_eyes, gesture_event_cb, LV_EVENT_GESTURE, NULL);
+  lv_obj_add_flag(scr_eyes, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(scr_eyes, scr_event_cb, LV_EVENT_ALL, NULL);
 
   lv_style_init(&style_eye);
   lv_style_set_radius(&style_eye, EYE_RADIUS);
@@ -1649,9 +2228,43 @@ void ui_robo_eyes_init(void) {
   lv_obj_add_style(sleep_z3, &style_z, 0);
   lv_obj_add_flag(sleep_z3, LV_OBJ_FLAG_HIDDEN);
 
+  // --- Angry Elements ---
+  left_angry_eye = create_left_angry_eye_image(scr_eyes);
+  lv_obj_align(left_angry_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X, 0);
+  lv_obj_add_flag(left_angry_eye, LV_OBJ_FLAG_HIDDEN);
+
+  right_angry_eye = create_right_angry_eye_image(scr_eyes);
+  lv_obj_align(right_angry_eye, LV_ALIGN_CENTER, EYE_OFFSET_X, 0);
+  lv_obj_add_flag(right_angry_eye, LV_OBJ_FLAG_HIDDEN);
+
+  // --- Blue Angry Elements (Frame 2) ---
+  // Re-use helper logic with Color Param?
+  // For simplicity and speed, we will call duplicated specific functions for
+  // Blue variants.
+  left_angry_blue_eye = create_left_angry_blue_eye_image(scr_eyes);
+  lv_obj_align(left_angry_blue_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X, 0);
+  lv_obj_add_flag(left_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+
+  right_angry_blue_eye = create_right_angry_blue_eye_image(scr_eyes);
+  lv_obj_align(right_angry_blue_eye, LV_ALIGN_CENTER, EYE_OFFSET_X, 0);
+  lv_obj_add_flag(right_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+
+  // Blue Mouth (Peanut/Rounded Rect)
+  angry_blue_mouth = lv_obj_create(scr_eyes);
+  lv_obj_set_size(angry_blue_mouth, 80, 40);
+  lv_obj_set_style_radius(angry_blue_mouth, 20, 0); // Fully rounded
+  lv_obj_set_style_bg_color(angry_blue_mouth, lv_color_hex(0x00FFFF),
+                            0); // Cyan
+  lv_obj_set_style_bg_opa(angry_blue_mouth, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(angry_blue_mouth, 0, 0);
+  lv_obj_align(angry_blue_mouth, LV_ALIGN_CENTER, 0, 80);
+  lv_obj_add_flag(angry_blue_mouth, LV_OBJ_FLAG_HIDDEN);
+
+  // Lids removed - baked into eye images
+
   lv_scr_load(scr_eyes);
   srand(12345);
-  main_timer = lv_timer_create(main_loop, 50, NULL);
+  main_timer = lv_timer_create(main_loop, 16, NULL); // 16ms = ~60 FPS
 }
 
 // --- API ---
