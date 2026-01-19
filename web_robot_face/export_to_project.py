@@ -15,12 +15,158 @@ def rgb565_convert(r, g, b):
     g6 = (g >> 2) & 0x3F
     b5 = (b >> 3) & 0x1F
     rgb565 = (r5 << 11) | (g6 << 5) | b5
-    return rgb565 & 0xFF, (rgb565 >> 8) & 0xFF
+    # Return High Byte, Low Byte (Big Endian - commonly needed for proper color)
+    return (rgb565 >> 8) & 0xFF, rgb565 & 0xFF
 
 def hex_to_rgb(hex_color):
     """Convert #RRGGBB to (r, g, b)"""
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+def blend_colors(bg_rgb, fg_rgb, opacity):
+    """Blend foreground color onto background with opacity"""
+    r = int(bg_rgb[0] * (1 - opacity) + fg_rgb[0] * opacity)
+    g = int(bg_rgb[1] * (1 - opacity) + fg_rgb[1] * opacity)
+    b = int(bg_rgb[2] * (1 - opacity) + fg_rgb[2] * opacity)
+    return (r, g, b)
+
+def render_shape_to_pixels(pixels, shape, width, height):
+    """Render a shape object to the pixel array"""
+    if not shape or 'type' not in shape:
+        return
+    
+    import math
+    
+    shape_type = shape['type']
+    # Use float for precision during calculation
+    sx = float(shape.get('x', 0))
+    sy = float(shape.get('y', 0))
+    w = float(shape.get('width', 0))
+    h = float(shape.get('height', 0))
+    rotation = float(shape.get('rotation', 0)) # Degrees
+    
+    color = shape.get('color', '#FFFFFF')
+    opacity = float(shape.get('opacity', 1.0))
+    
+    fg_rgb = hex_to_rgb(color)
+    
+    # Calculate bounding box for optimization
+    # Simple max dimension to cover rotated area
+    max_dim = math.sqrt(w*w + h*h)
+    center_x = sx + w / 2
+    center_y = sy + h / 2
+    
+    start_x = max(0, int(center_x - max_dim / 2))
+    end_x = min(width, int(center_x + max_dim / 2 + 1))
+    start_y = max(0, int(center_y - max_dim / 2))
+    end_y = min(height, int(center_y + max_dim / 2 + 1))
+    
+    rad = math.radians(rotation)
+    cos_a = math.cos(rad)
+    sin_a = math.sin(rad)
+    
+    if shape_type == 'rect':
+        half_w = w / 2
+        half_h = h / 2
+        
+        for py in range(start_y, end_y):
+            for px in range(start_x, end_x):
+                # Rotate point back to axis-aligned space relative to center
+                dx = px - center_x
+                dy = py - center_y
+                
+                # Inverse rotation to check axis-aligned bounds
+                # x' = x*cos(-a) - y*sin(-a) = x*cos(a) + y*sin(a)
+                # y' = x*sin(-a) + y*cos(-a) = -x*sin(a) + y*cos(a)
+                local_x = dx * cos_a + dy * sin_a
+                local_y = -dx * sin_a + dy * cos_a
+                
+                if -half_w <= local_x <= half_w and -half_h <= local_y <= half_h:
+                    idx = py * width + px
+                    if idx < len(pixels):
+                        if opacity < 1.0:
+                            pixels[idx] = blend_colors(pixels[idx], fg_rgb, opacity)
+                        else:
+                            pixels[idx] = list(fg_rgb)
+    
+    elif shape_type == 'ellipse':
+        half_w = w / 2
+        half_h = h / 2
+        
+        # Avoid division by zero
+        if half_w < 0.1 or half_h < 0.1: return
+
+        for py in range(start_y, end_y):
+            for px in range(start_x, end_x):
+                dx = px - center_x
+                dy = py - center_y
+                
+                local_x = dx * cos_a + dy * sin_a
+                local_y = -dx * sin_a + dy * cos_a
+                
+                # Ellipse equation: (x/rx)^2 + (y/ry)^2 <= 1
+                if (local_x * local_x) / (half_w * half_w) + (local_y * local_y) / (half_h * half_h) <= 1:
+                    idx = py * width + px
+                    if idx < len(pixels):
+                        if opacity < 1.0:
+                            pixels[idx] = blend_colors(pixels[idx], fg_rgb, opacity)
+                        else:
+                            pixels[idx] = list(fg_rgb)
+                            
+    elif shape_type == 'line' and 'lineEnd' in shape:
+        # Drawing rotated thick lines is complex, falling back to simple Bresenham for endpoints
+        # Real rotation would involve drawing a rotated rectangle
+        
+        line_end = shape['lineEnd']
+        x1_base = sx
+        y1_base = sy
+        x2_base = float(line_end.get('x', 0))
+        y2_base = float(line_end.get('y', 0))
+        
+        # Actually, lines in the editor are just define by start (x,y) and end (x,y)
+        # Rotation applies to the group or visual only? 
+        # Usually lines are not 'rotated' by a property, but by moving endpoints.
+        # But if the user applied a rotation transform to a line object...
+        # For simplicity, let's treat lines as lines connected by endpoints.
+        
+        # But if rotation is present, we must rotate the endpoints around the center?
+        # NO, usually lines in fabric.js/canvas just use endpoints. 
+        # If 'rotation' property exists, it rotates around the center of the bounding box.
+        
+        # Let's simplify: Standard Bresenham (ignore rotation for lines for now as they are rarely rotated as objects)
+        
+        x1, y1 = int(x1_base), int(y1_base)
+        x2, y2 = int(x2_base), int(y2_base)
+        
+        # ... (Existing Bresenham Code) ...
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        sx = 1 if x1 < x2 else -1
+        sy = 1 if y1 < y2 else -1
+        err = dx - dy
+        
+        curr_x, curr_y = x1, y1
+        
+        while True:
+            if 0 <= curr_x < width and 0 <= curr_y < height:
+                idx = curr_y * width + curr_x
+                if idx < len(pixels):
+                    if opacity < 1.0:
+                        pixels[idx] = blend_colors(pixels[idx], fg_rgb, opacity)
+                    else:
+                        pixels[idx] = list(fg_rgb)
+            
+            if curr_x == x2 and curr_y == y2:
+                break
+            
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                curr_x += sx
+            if e2 < dx:
+                err += dx
+                curr_y += sy
+
 
 def generate_c_file(json_data, output_dir):
     """Generate C file from JSON animation data"""
@@ -33,14 +179,26 @@ def generate_c_file(json_data, output_dir):
         print("❌ No frames found in JSON!")
         return None
     
-    # Get animation name from first frame or use default
-    anim_name = "exported_anim"
-    
-    # Ask user for animation name
-    user_name = input(f"Animation name (default: {anim_name}): ").strip()
-    if user_name:
-        # Sanitize name
-        anim_name = ''.join(c if c.isalnum() or c == '_' else '_' for c in user_name.lower())
+    # Get animation name
+    if 'name' in json_data and json_data['name']:
+        anim_name = json_data['name']
+    else:
+        # Ask user for animation name (Only if not provided automatically)
+        anim_name = "exported_anim"
+        try:
+            print(f"Animation name (default: {anim_name}): ", end='')
+            # Flush stdout to ensure prompt appears
+            sys.stdout.flush() 
+            # Check if stdin is interactive before asking
+            if sys.stdin.isatty():
+                user_name = input().strip()
+                if user_name:
+                    anim_name = user_name
+        except Exception:
+            pass # Keep default if input fails
+
+    # Sanitize name
+    anim_name = ''.join(c if c.isalnum() or c == '_' else '_' for c in anim_name.lower())
     
     print(f"\n📝 Generating: {anim_name}.c")
     print(f"   Size: {width}x{height}")
@@ -87,8 +245,11 @@ def generate_c_file(json_data, output_dir):
                     if idx_px < len(pixels):
                         pixels[idx_px] = list(hex_to_rgb(color))
         
-        # TODO: Render shapes to pixels (if needed)
-        # For now, we only handle pixel data
+        
+        # Render shapes to pixels
+        if 'shapes' in frame_data and frame_data['shapes']:
+            for shape in frame_data['shapes']:
+                render_shape_to_pixels(pixels, shape, width, height)
         
         # Convert to RGB565
         c_content += f"const LV_ATTRIBUTE_MEM_ALIGN uint8_t {frame_name}_map[] = {{\n"
@@ -320,17 +481,24 @@ def update_cmake(anim_name, cmake_file):
     
     # Find SRCS line end and append
     if 'SRCS ' in content:
-        # Simple string manipulation to append before the closing parenthesis/quote of SRCS
-        # This is a bit hacky but works for standard list formats
         import re
-        # Look for the last quote in the SRCS list and append after it
-        new_content = re.sub(r'(SRCS\s+.*?")', f'\\1 {file_entry}', content, count=1, flags=re.DOTALL)
+        # Look for the SRCS line and append the new file with proper spacing
+        # Match the SRCS line and add the new file before the next keyword or closing paren
+        pattern = r'(SRCS\s+[^)]+?)(\s+PRIV_REQUIRES|\s+REQUIRES|\s+INCLUDE_DIRS|\n)'
         
-        if new_content == content:
-           # Retry with different pattern or just append to end of list if multiline
-           pass
-        else:
+        def add_file(match):
+            srcs_part = match.group(1)
+            rest = match.group(2)
+            # Add the file with proper spacing
+            return f'{srcs_part} {file_entry}{rest}'
+        
+        new_content = re.sub(pattern, add_file, content, count=1)
+        
+        if new_content != content:
             content = new_content
+        else:
+            # Fallback: try simpler pattern
+            print("⚠️  Could not automatically update CMakeLists.txt")
 
     with open(cmake_file, 'w', encoding='utf-8') as f:
         f.write(content)  

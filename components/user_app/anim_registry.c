@@ -14,9 +14,9 @@
 
 // ========================================
 // Include your animation headers here
+#include "animations/my_anim.h"
 // ========================================
 
-#include "animations/blink_anim.h"
 
 // Example: Uncomment when you have animations
 // #include "animations/happy_anim.h"
@@ -27,11 +27,9 @@
 // ========================================
 
 void register_all_animations(void) {
+    anim_manager_register("my", my_anim_frames, my_anim_frame_count, 500);
   // Register animations here
   // Format: anim_manager_register(name, frames, frame_count, duration_ms)
-
-  anim_manager_register("blink", blink_anim_frames, blink_anim_frame_count,
-                        500);
 
   // Example: Uncomment when you have animations
   // anim_manager_register("happy", happy_anim_frames,

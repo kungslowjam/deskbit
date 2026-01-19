@@ -50,9 +50,17 @@
                 <input type="range" id="fps-range" min="1" max="24" value="12">
                 <span id="fps-value">12 FPS</span>
                 <div class="divider"></div>
-                <button id="import-btn" class="btn outline">📂 Import</button>
-                <button id="export-btn" class="btn outline">💾 Export JSON</button>
-                <button id="export-c-btn" class="btn primary">⬇️ Export to C</button>
+                <button id="import-btn" class="btn outline" title="Import JSON">📂 Import</button>
+                <button id="export-btn" class="btn outline" title="Export JSON">💾 Json</button>
+                <button id="export-c-btn" class="btn outline" title="Download C files">⬇️ C File</button>
+                <button id="send-btn" class="btn primary" onclick="sendToRobot()"
+                    style="background: linear-gradient(135deg, #00C6FF, #0072FF); border: none; box-shadow: 0 0 10px rgba(0,114,255,0.5);">
+                    ⚡ Send to Robot
+                </button>
+                <button id="del-btn" class="btn outline" onclick="deleteFromRobot()" title="Delete from Robot Project"
+                    style="margin-left: 5px; color: #ff5555; border-color: #ff5555;">
+                    🗑️
+                </button>
             </div>
         </header>
 

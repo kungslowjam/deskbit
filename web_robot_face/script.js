@@ -330,6 +330,9 @@ function init() {
         toggleRound(e.target.checked);
     });
 
+    // Send to Robot
+    document.getElementById('send-btn')?.addEventListener('click', sendToRobot);
+
     // Animation Name Input - Sync with current file
     const animNameInput = document.getElementById('anim-name');
     if (animNameInput) {
@@ -1700,6 +1703,99 @@ extern const uint8_t ${name}_frame_count;
 
     showToast(`✅ Exported ${name}.c and ${name}.h`);
 }
+
+// ======== SEND TO ROBOT (BRIDGE) ========
+async function sendToRobot() {
+    let name = document.getElementById('anim-name')?.value || 'my_anim';
+    // Sanitize
+    name = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+
+    // Prepare Data
+    const data = {
+        name: name,
+        width: GRID_WIDTH,
+        height: GRID_HEIGHT,
+        fps: parseInt(document.getElementById('fps-range')?.value || 12),
+        frames: frames.map(f => ({
+            pixels: f.pixels.map((c, i) => c ? { i, c } : null).filter(p => p),
+            duration: f.duration,
+            shapes: f.shapes ? f.shapes.map(s => ({
+                type: s.type,
+                x: s.x,
+                y: s.y,
+                width: s.width,
+                height: s.height,
+                color: s.color,
+                opacity: s.opacity,
+                blendMode: s.blendMode,
+                rotation: s.rotation,
+                lineEnd: s.lineEnd,
+                id: s.id
+            })) : []
+        }))
+    };
+
+    showToast('⚡ Sending to Robot Project...');
+
+    // Smart URL: If running on server, use relative path. If file://, use localhost:8000
+    const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:8000' : '';
+
+    try {
+        const response = await fetch(`${API_BASE}/save-anim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showToast('✅ Saved! Run "idf.py build" now.');
+            console.log(result);
+        } else {
+            showToast('❌ Error: Start "run_bridge.bat" first!');
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('❌ Failed! Is bridge server running?');
+    }
+}
+
+// ======== DELETE FROM ROBOT ========
+async function deleteFromRobot() {
+    let name = document.getElementById('anim-name')?.value;
+    if (!name) return;
+
+    // Sanitize
+    name = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+
+    if (!confirm(`Confirm delete '${name}' from Robot Project?`)) {
+        return;
+    }
+
+    showToast(`🗑️ Deleting ${name}...`);
+
+    const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:8000' : '';
+
+    try {
+        const response = await fetch(`${API_BASE}/delete-anim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showToast(`✅ Deleted ${name}! Run "idf.py build" to update.`);
+            console.log(result);
+        } else {
+            showToast('❌ Error: Start "run_bridge.bat" first!');
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('❌ Failed! Is bridge server running?');
+    }
+}
+
 
 async function saveFile(content, filename, mimeType) {
     if ('showSaveFilePicker' in window) {

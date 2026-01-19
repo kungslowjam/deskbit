@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 // Maximum number of registered animations
 #define MAX_ANIMATIONS 20
 
@@ -126,6 +125,10 @@ bool anim_manager_play(const char *name, uint16_t loop) {
 
   // Center on screen
   lv_obj_align(current_animimg, LV_ALIGN_CENTER, 0, 0);
+
+  // Ensure visible and on top
+  lv_obj_clear_flag(current_animimg, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(current_animimg);
 
   // Start animation
   lv_animimg_start(current_animimg);

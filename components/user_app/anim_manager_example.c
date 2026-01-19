@@ -12,6 +12,8 @@
 
 #include "anim_manager.h"
 #include "lvgl.h"
+#include <stdio.h>
+
 
 // Declare this in anim_registry.c
 extern void register_all_animations(void);

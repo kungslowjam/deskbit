@@ -543,7 +543,9 @@ static void update_positions(void) {
   if (lv_tick_get() - last_anim_test > 3000) {
     if (!anim_manager_is_playing() && current_emotion == EMO_IDLE) {
       // Play blink animation if idle
-      anim_manager_play("blink", 1);
+      // anim_manager_play("blink", 1); // Fixed: blink removed, use my or skip
+      // fallback to procedural blink or just skip if no anim
+      // do_some_procedural_blink();
     }
     last_anim_test = lv_tick_get();
   }
@@ -2342,11 +2344,14 @@ void ui_robo_eyes_init(void) {
   ui_custom_anim_align(custom_anim_player, LV_ALIGN_CENTER, 0, 0);
 
   // References for automatic frame loading
+  /* Deprecated externs
   extern const uint8_t my_anim_frame_count;
   extern const shape_keyframe_t *my_anim_all_shapes[];
   extern const uint8_t my_anim_all_counts[];
+  */
 
   // No more hardcoding! Directly pass the master arrays.
+  /* Manual animation init - Deprecated by Animation Manager
   // Cast to (const shape_keyframe_t **) to match function signature
   ui_custom_anim_set_shape_src(custom_anim_player,
                                (const shape_keyframe_t **)my_anim_all_shapes,
@@ -2355,6 +2360,7 @@ void ui_robo_eyes_init(void) {
 
   // It starts hidden/stopped
   ui_custom_anim_stop(custom_anim_player);
+  */
 
   srand(12345);
   main_timer = lv_timer_create(main_loop, 16, NULL); // 16ms = ~60 FPS
@@ -2366,10 +2372,13 @@ void ui_robo_eyes_init(void) {
 // --- API ---
 void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
   // 6. Ensure other emotions stop the custom animation
-  if (emotion != EMOTION_CUSTOM && custom_anim_player) {
-    ui_custom_anim_stop(custom_anim_player);
-    // Ensure hidden
-    lv_obj_add_flag(custom_anim_player->canvas, LV_OBJ_FLAG_HIDDEN);
+  if (emotion != EMOTION_CUSTOM) {
+    anim_manager_stop();
+    // Also stop legacy if it exists
+    if (custom_anim_player) {
+      ui_custom_anim_stop(custom_anim_player);
+      lv_obj_add_flag(custom_anim_player->canvas, LV_OBJ_FLAG_HIDDEN);
+    }
   }
 
   // 5. Handle EMOTION_CUSTOM
@@ -2382,12 +2391,16 @@ void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
     hide_sleep();
     hide_angry();
 
-    // Start Custom Anim
+    // Start Custom Anim via Manager
+    anim_manager_play("my", 0); // 0 = Infinite loop
+
+    /* Legacy deprecated
     if (custom_anim_player) {
       // Ensure visible
       lv_obj_clear_flag(custom_anim_player->canvas, LV_OBJ_FLAG_HIDDEN);
       ui_custom_anim_start(custom_anim_player, LV_ANIM_REPEAT_INFINITE);
     }
+    */
     current_emotion = EMO_CUSTOM;
     timer_ms = 0; // Reset timer
     return;
