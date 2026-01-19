@@ -4,11 +4,15 @@
  */
 
 #include "ui_robo_eyes.h"
+#include "anim_manager.h"
 #include "lvgl.h"
+#include "ui_custom_anim.h" // Add support for custom animations
 #include "ui_settings.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+extern void register_all_animations(void);
 
 LV_FONT_DECLARE(lv_font_montserratMedium_20);
 LV_FONT_DECLARE(lv_font_montserratMedium_23);
@@ -131,6 +135,18 @@ static lv_obj_t *angry_blue_mouth = NULL;
 
 static lv_timer_t *main_timer = NULL;
 
+// Custom Animation Player
+static custom_anim_t *custom_anim_player = NULL;
+
+// References to exported shape animation data
+extern const shape_keyframe_t my_anim_f0_shapes[];
+extern const shape_keyframe_t my_anim_f1_shapes[];
+extern const shape_keyframe_t my_anim_f2_shapes[];
+extern const uint8_t my_anim_f0_shape_count;
+extern const uint8_t my_anim_f1_shape_count;
+extern const uint8_t my_anim_f2_shape_count;
+extern const uint32_t my_anim_total_duration;
+
 // State
 typedef enum {
   EMO_IDLE,
@@ -139,7 +155,8 @@ typedef enum {
   EMO_LAUGH,
   EMO_LOVE,
   EMO_SLEEP,
-  EMO_ANGRY
+  EMO_ANGRY,
+  EMO_CUSTOM
 } emotion_t;
 static emotion_t current_emotion = EMO_IDLE;
 static int timer_ms = 0;
@@ -515,6 +532,22 @@ static void update_positions(void) {
   breath_phase += 2;
   if (breath_phase >= 360)
     breath_phase = 0;
+
+  // ==========================================
+  // ANIMATION MANAGER UPDATE
+  // ==========================================
+  anim_manager_update();
+
+  // Auto-blink test (Every ~3 seconds)
+  static uint32_t last_anim_test = 0;
+  if (lv_tick_get() - last_anim_test > 3000) {
+    if (!anim_manager_is_playing() && current_emotion == EMO_IDLE) {
+      // Play blink animation if idle
+      anim_manager_play("blink", 1);
+    }
+    last_anim_test = lv_tick_get();
+  }
+  // ==========================================
 
   // Global Breathe Wave (used by Normal, Happy, Sleep)
   float breath_rad = breath_phase * 0.01745f;
@@ -1491,6 +1524,11 @@ static void show_idle(void) { fade_in_normal_eyes(); }
 
 static void switch_to_next_emotion(void) {
   // Logic to switch to next emotion
+  // Stop custom anim if switching to any other emotion
+  if (custom_anim_player) {
+    ui_custom_anim_stop(custom_anim_player);
+  }
+
   switch (current_emotion) {
   case EMO_IDLE:
     show_happy();
@@ -1524,6 +1562,15 @@ static void switch_to_next_emotion(void) {
   case EMO_ANGRY:
     hide_angry();
     show_idle(); // Restore normal state
+    current_emotion = EMO_IDLE;
+    break;
+  case EMO_CUSTOM:
+    // If currently in custom, switch to idle
+    if (custom_anim_player) {
+      ui_custom_anim_stop(custom_anim_player);
+      lv_obj_add_flag(custom_anim_player->canvas, LV_OBJ_FLAG_HIDDEN);
+    }
+    show_idle();
     current_emotion = EMO_IDLE;
     break;
   }
@@ -1645,6 +1692,10 @@ static void main_loop(lv_timer_t *timer) {
     break;
   case EMO_ANGRY:
     duration_ms = 2000; // Reduced from 3000
+    break;
+  case EMO_CUSTOM:         // Custom animation might have its own duration or be
+                           // infinite
+    duration_ms = 9999999; // Effectively infinite, until manually changed
     break;
   }
 
@@ -1925,8 +1976,23 @@ static lv_obj_t *create_right_angry_blue_eye_image(lv_obj_t *parent) {
   lv_obj_t *img = lv_img_create(parent);
   lv_img_set_src(img, lv_canvas_get_img(canvas_angry_blue_right_ref));
   lv_obj_set_style_img_recolor_opa(img, LV_OPA_TRANSP, 0);
-  lv_img_set_antialias(img, true);
+  lv_img_set_antialias(img, true); // AA Enabled
   return img;
+}
+
+lv_obj_t *ui_robo_eyes_get_scr(void) { return scr_eyes; }
+
+// Touch event handler for the screen
+static void screen_touch_cb(lv_event_t *e) {
+  // Switch to Custom Animation when screen is clicked
+  if (current_emotion != EMO_CUSTOM) {
+    printf("Screen clicked! Switching to Custom Animation.\n");
+    ui_robo_eyes_set_emotion_type(EMOTION_CUSTOM);
+  } else {
+    // Toggle back to Normal if clicked again
+    printf("Screen clicked! Switching back to Normal.\n");
+    ui_robo_eyes_set_emotion_type(EMOTION_NORMAL);
+  }
 }
 
 void ui_robo_eyes_init(void) {
@@ -2262,13 +2328,140 @@ void ui_robo_eyes_init(void) {
 
   // Lids removed - baked into eye images
 
+  // Add WiFi indicator to robot eyes screen
+  ui_settings_create_wifi_indicator_on(scr_eyes);
+
   lv_scr_load(scr_eyes);
+
+  // Initialize Animation Manager
+  anim_manager_init(scr_eyes);
+  register_all_animations();
+
+  // Initialize Custom Shape Animation Player
+  custom_anim_player = ui_custom_anim_create(scr_eyes);
+  ui_custom_anim_align(custom_anim_player, LV_ALIGN_CENTER, 0, 0);
+
+  // References for automatic frame loading
+  extern const uint8_t my_anim_frame_count;
+  extern const shape_keyframe_t *my_anim_all_shapes[];
+  extern const uint8_t my_anim_all_counts[];
+
+  // No more hardcoding! Directly pass the master arrays.
+  // Cast to (const shape_keyframe_t **) to match function signature
+  ui_custom_anim_set_shape_src(custom_anim_player,
+                               (const shape_keyframe_t **)my_anim_all_shapes,
+                               my_anim_all_counts, my_anim_frame_count,
+                               my_anim_total_duration, lv_anim_path_overshoot);
+
+  // It starts hidden/stopped
+  ui_custom_anim_stop(custom_anim_player);
+
   srand(12345);
   main_timer = lv_timer_create(main_loop, 16, NULL); // 16ms = ~60 FPS
+
+  // Add touch event to the whole screen to switch modes
+  lv_obj_add_event_cb(scr_eyes, screen_touch_cb, LV_EVENT_CLICKED, NULL);
 }
 
 // --- API ---
-void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {}
+void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
+  // 6. Ensure other emotions stop the custom animation
+  if (emotion != EMOTION_CUSTOM && custom_anim_player) {
+    ui_custom_anim_stop(custom_anim_player);
+    // Ensure hidden
+    lv_obj_add_flag(custom_anim_player->canvas, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // 5. Handle EMOTION_CUSTOM
+  if (emotion == EMOTION_CUSTOM) {
+    fade_out_normal_eyes();
+    hide_happy();
+    hide_sad();
+    hide_laugh();
+    hide_love();
+    hide_sleep();
+    hide_angry();
+
+    // Start Custom Anim
+    if (custom_anim_player) {
+      // Ensure visible
+      lv_obj_clear_flag(custom_anim_player->canvas, LV_OBJ_FLAG_HIDDEN);
+      ui_custom_anim_start(custom_anim_player, LV_ANIM_REPEAT_INFINITE);
+    }
+    current_emotion = EMO_CUSTOM;
+    timer_ms = 0; // Reset timer
+    return;
+  }
+
+  // Hide current
+  switch (current_emotion) {
+  case EMO_IDLE:
+    fade_out_normal_eyes();
+    break;
+  case EMO_HAPPY:
+    hide_happy();
+    break;
+  case EMO_SAD:
+    hide_sad();
+    break;
+  case EMO_LAUGH:
+    hide_laugh();
+    break;
+  case EMO_LOVE:
+    hide_love();
+    break;
+  case EMO_SLEEP:
+    hide_sleep();
+    break;
+  case EMO_ANGRY:
+    hide_angry();
+    break;
+  case EMO_CUSTOM:
+    if (custom_anim_player) {
+      ui_custom_anim_stop(custom_anim_player);
+      lv_obj_add_flag(custom_anim_player->canvas, LV_OBJ_FLAG_HIDDEN);
+    }
+    break;
+  }
+
+  // Show new (Map robot_emotion_t to internal emotion_t)
+  switch (emotion) {
+  case EMOTION_NORMAL:
+    show_idle();
+    current_emotion = EMO_IDLE;
+    break;
+  case EMOTION_HAPPY:
+    show_happy();
+    current_emotion = EMO_HAPPY;
+    break;
+  case EMOTION_SAD:
+    show_sad();
+    current_emotion = EMO_SAD;
+    break;
+  case EMOTION_LAUGH:
+    show_laugh();
+    current_emotion = EMO_LAUGH;
+    break;
+  case EMOTION_LOVE:
+    show_love();
+    current_emotion = EMO_LOVE;
+    break;
+  case EMOTION_SLEEP:
+    show_sleep();
+    current_emotion = EMO_SLEEP;
+    break;
+  case EMOTION_ANGRY:
+    show_angry();
+    current_emotion = EMO_ANGRY;
+    break;
+  // Map others to normal for now if not implemented
+  default:
+    show_idle();
+    current_emotion = EMO_IDLE;
+    break;
+  }
+  timer_ms = 0; // Reset timer
+}
 void ui_robo_eyes_set_emotion(const char *emotion) {}
 void ui_robo_eyes_look_at(int16_t x, int16_t y) {
   float prev_x = target_gaze_x;

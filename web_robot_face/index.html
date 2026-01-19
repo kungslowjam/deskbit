@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Face Studio</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header / Top Bar -->
+        <header class="top-bar">
+            <div class="logo">
+                <span class="icon">🤖</span>
+                <h1>Robot Face Studio</h1>
+            </div>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Name:</label>
+                    <input type="text" id="anim-name" value="my_anim" placeholder="Animation name"
+                        style="width: 120px;">
+                </div>
+                <div class="divider"></div>
+                <div class="control-group">
+                    <label>W:</label>
+                    <input type="number" id="canvas-width" value="64" min="8" max="128" style="width: 50px;">
+                    <label>H:</label>
+                    <input type="number" id="canvas-height" value="32" min="8" max="128" style="width: 50px;">
+                </div>
+                <div class="divider"></div>
+                <label class="toggle-label">
+                    <input type="checkbox" id="round-toggle"> Round
+                </label>
+                <div class="divider"></div>
+                <button id="play-btn" class="btn primary">
+                    <span class="icon">▶</span> Play
+                </button>
+                <button id="stop-btn" class="btn secondary">
+                    <span class="icon">⏹</span> Stop
+                </button>
+                <div class="divider"></div>
+                <label for="fps-range">Speed:</label>
+                <input type="range" id="fps-range" min="1" max="24" value="12">
+                <span id="fps-value">12 FPS</span>
+                <div class="divider"></div>
+                <button id="import-btn" class="btn outline">📂 Import</button>
+                <button id="export-btn" class="btn outline">💾 Export JSON</button>
+                <button id="export-c-btn" class="btn primary">⬇️ Export to C</button>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <!-- File Sidebar (New) -->
+            <aside class="file-sidebar">
+                <div class="sidebar-header">
+                    <span>Local files</span>
+                    <div class="sidebar-actions">
+                        <button id="new-file-btn" class="icon-btn" title="New File">+</button>
+                    </div>
+                </div>
+                <div class="file-list" id="file-list">
+                    <!-- Files will be injected here -->
+                    <div class="file-item active">default_anim</div>
+                </div>
+            </aside>
+
+            <!-- Left Toolbar -->
+            <aside class="toolbar">
+                <div class="tool-group">
+                    <button class="tool-btn active" id="tool-pen" title="Pen Tool (P)">
+                        ✏️
+                    </button>
+                    <button class="tool-btn" id="tool-brush" title="Brush Tool (B)">
+                        �️
+                    </button>
+                    <button class="tool-btn" id="tool-eraser" title="Eraser Tool (E)">
+                        🧼
+                    </button>
+                    <button class="tool-btn" id="tool-fill" title="Fill Tool (G)">
+                        🪣
+                    </button>
+                </div>
+
+                <div class="divider-horizontal"></div>
+
+                <!-- Shape Tools (Object Mode) -->
+                <div class="tool-group">
+                    <button class="tool-btn" id="tool-select" title="Select/Move Tool (V)">
+                        🔲
+                    </button>
+                    <button class="tool-btn" id="tool-rect-obj" title="Rectangle Object (Shift+R)">
+                        ▢
+                    </button>
+                    <button class="tool-btn" id="tool-ellipse-obj" title="Ellipse Object (Shift+O)">
+                        ○
+                    </button>
+                    <button class="tool-btn" id="tool-line-obj" title="Line Object (Shift+L)">
+                        ╱
+                    </button>
+                </div>
+
+                <div class="divider-horizontal"></div>
+
+                <!-- Pixel Shape Tools -->
+                <div class="tool-group">
+                    <button class="tool-btn" id="tool-line" title="Line Pixel (L)">
+                        �
+                    </button>
+                    <button class="tool-btn" id="tool-rect" title="Rectangle Pixel (R)">
+                        ⬜
+                    </button>
+                    <button class="tool-btn" id="tool-circle" title="Circle Pixel (C)">
+                        ⭕
+                    </button>
+                    <button class="tool-btn" id="tool-eyedropper" title="Eyedropper (I)">
+                        💧
+                    </button>
+                </div>
+
+                <div class="divider-horizontal"></div>
+
+                <div class="tool-group">
+                    <button class="tool-btn" id="action-clear" title="Clear Frame">
+                        �️
+                    </button>
+                    <button class="tool-btn" id="action-invert" title="Invert Colors">
+                        🌗
+                    </button>
+                    <button class="tool-btn" id="action-undo" title="Undo (Ctrl+Z)">
+                        ↩️
+                    </button>
+                </div>
+
+                <div class="divider-horizontal"></div>
+
+                <div class="tool-group">
+                    <label style="font-size: 0.7rem; color: #888;">Size</label>
+                    <input type="range" id="brush-size" min="1" max="20" value="1" style="width: 40px;">
+                    <span id="brush-size-value" style="font-size: 0.7rem;">1</span>
+                </div>
+
+                <div class="divider-horizontal"></div>
+
+                <!-- Color Picker -->
+                <div class="tool-group">
+                    <input type="color" id="color-picker" value="#00d2ff" title="Color">
+                    <div class="color-palette">
+                        <div class="palette-swatch" style="background-color: #00d2ff;" onclick="setColor('#00d2ff')">
+                        </div>
+                        <div class="palette-swatch" style="background-color: #ff0055;" onclick="setColor('#ff0055')">
+                        </div>
+                        <div class="palette-swatch" style="background-color: #00ff66;" onclick="setColor('#00ff66')">
+                        </div>
+                        <div class="palette-swatch" style="background-color: #ffffff;" onclick="setColor('#ffffff')">
+                        </div>
+                        <div class="palette-swatch" style="background-color: #000000;" onclick="setColor('#000000')">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shape Properties -->
+                <div class="tool-group">
+                    <div class="control-item">
+                        <span class="label">Opacity</span>
+                        <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="1" title="Opacity">
+                    </div>
+                    <div class="control-item">
+                        <span class="label">Blend</span>
+                        <select id="blend-mode-select" title="Blend Mode">
+                            <option value="source-over">Normal</option>
+                            <option value="lighter">Add (Lighter)</option>
+                            <option value="screen">Screen</option>
+                            <option value="multiply">Multiply</option>
+                            <option value="overlay">Overlay</option>
+                            <option value="difference">Difference</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="divider-horizontal"></div>
+            </aside>
+
+            <!-- Main Canvas Area -->
+            <section class="canvas-area">
+                <div class="canvas-viewport" id="canvas-viewport">
+                    <div class="canvas-wrapper" id="canvas-wrapper">
+                        <canvas id="editor-canvas" width="640" height="320"></canvas>
+                        <div class="grid-overlay" id="grid-overlay"></div>
+                    </div>
+                </div>
+                <div class="zoom-controls">
+                    <button id="zoom-out-btn" class="zoom-btn" title="Zoom Out (-)">−</button>
+                    <span id="zoom-level">100%</span>
+                    <button id="zoom-in-btn" class="zoom-btn" title="Zoom In (+)">+</button>
+                    <button id="zoom-reset-btn" class="zoom-btn" title="Reset Zoom (0)">⟲</button>
+                    <button id="zoom-fit-btn" class="zoom-btn" title="Fit to View">▣</button>
+                </div>
+            </section>
+
+            <!-- Right Panel (Preview & Props) -->
+            <aside class="properties-panel">
+                <div class="panel-section">
+                    <h3>Preview</h3>
+                    <div class="preview-box">
+                        <canvas id="preview-canvas" width="150" height="150"></canvas>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <h3>Frame Info</h3>
+                    <div class="prop-row">
+                        <label>Index:</label>
+                        <span id="frame-index">0</span>
+                    </div>
+                    <div class="prop-row">
+                        <label>Duration:</label>
+                        <input type="number" id="frame-duration" value="100" min="10" max="10000" step="10"> ms
+                    </div>
+                    <div class="prop-row">
+                        <label>Total Time:</label>
+                        <span id="total-time">0.00s</span>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <h3>Animation</h3>
+                    <div class="prop-row">
+                        <label>Current:</label>
+                        <span id="playhead-time">00:00.000</span>
+                    </div>
+                    <div class="prop-row">
+                        <label>Loop:</label>
+                        <select id="loop-mode">
+                            <option value="infinite">Infinite</option>
+                            <option value="once">Once</option>
+                            <option value="2x">2x</option>
+                            <option value="3x">3x</option>
+                            <option value="5x">5x</option>
+                            <option value="pingpong">Ping-Pong</option>
+                        </select>
+                    </div>
+                    <div class="prop-row">
+                        <label>Easing:</label>
+                        <select id="easing-mode">
+                            <option value="linear">Linear</option>
+                            <option value="ease-in">Ease In</option>
+                            <option value="ease-out">Ease Out</option>
+                            <option value="ease-in-out">Ease In Out</option>
+                            <option value="overshoot">Overshoot</option>
+                            <option value="bounce">Bounce</option>
+                            <option value="spring">Spring</option>
+                        </select>
+                    </div>
+                    <div class="prop-row">
+                        <label>Start Delay:</label>
+                        <input type="number" id="start-delay" value="0" min="0" max="10000" step="50"> ms
+                    </div>
+                    <div class="prop-row">
+                        <label>Repeat Delay:</label>
+                        <input type="number" id="repeat-delay" value="0" min="0" max="10000" step="50"> ms
+                    </div>
+                    <div class="prop-row">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="smooth-playback" checked>
+                            Smooth Blend
+                        </label>
+                    </div>
+                    <div class="prop-row">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="onion-skin-toggle">
+                            Onion Skinning
+                        </label>
+                    </div>
+                    <div class="prop-row">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="shape-tweening" checked>
+                            Shape Tweening
+                        </label>
+                    </div>
+                    <div class="prop-row">
+                        <label>Blend Mode:</label>
+                        <select id="blend-mode">
+                            <option value="crossfade">Crossfade</option>
+                            <option value="morph">Morph</option>
+                            <option value="dissolve">Dissolve</option>
+                        </select>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Bottom Timeline -->
+        <!-- Bottom Timeline -->
+        <footer class="timeline-area">
+            <div class="timeline-controls">
+                <div class="timeline-tools">
+                    <button id="add-frame-btn" class="btn small">+ Add Frame</button>
+                    <button id="dup-frame-btn" class="btn small">Duplicate</button>
+                    <button id="del-frame-btn" class="btn small danger">Delete</button>
+                </div>
+                <!-- Zoom timeline could go here -->
+            </div>
+
+            <div class="timeline-ruler" id="timeline-ruler">
+                <!-- Ruler ticks injected by JS -->
+                <div class="playhead" id="playhead">
+                    <div class="playhead-marker"></div>
+                </div>
+            </div>
+
+            <div class="timeline-tracks" id="timeline-tracks">
+                <div class="track-layer" id="main-track">
+                    <!-- Frame blocks injected by JS -->
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="script.js"></script>
+</body>
+
+</html>

@@ -4,6 +4,7 @@ idf_component_register(
   PRIV_REQUIRES
   esp_event
   nvs_flash
+  
   REQUIRES
   esp_wifi
   INCLUDE_DIRS "./")

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON to C Converter - Robot Face Studio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1e2442 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #00ffff, #ff0055);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: #a0aec0;
+            margin-bottom: 30px;
+        }
+
+        .drop-zone {
+            border: 3px dashed rgba(0, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .drop-zone:hover {
+            border-color: #00ffff;
+            background: rgba(0, 255, 255, 0.05);
+        }
+
+        .drop-zone.dragover {
+            border-color: #00ffff;
+            background: rgba(0, 255, 255, 0.1);
+        }
+
+        .drop-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: #00ffff;
+            color: #000;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #fff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+
+        .output {
+            background: #0a0e27;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .output.show {
+            display: block;
+        }
+
+        .file-info {
+            background: rgba(0, 255, 255, 0.1);
+            border-left: 4px solid #00ffff;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .download-btn {
+            background: #00ff66;
+            margin-right: 10px;
+        }
+
+        .download-btn:hover {
+            background: #00ff88;
+        }
+
+        pre {
+            background: #000;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            max-height: 400px;
+            font-size: 0.9rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🤖 JSON to C Converter</h1>
+        <p class="subtitle">Convert Robot Face Studio animations to C files</p>
+
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-icon">📂</div>
+            <h2>Drop JSON file here</h2>
+            <p style="color: #a0aec0; margin-top: 10px;">or click to browse</p>
+            <input type="file" id="fileInput" accept=".json" class="hidden">
+        </div>
+
+        <div class="output" id="output">
+            <div class="file-info" id="fileInfo"></div>
+
+            <button class="btn download-btn" id="downloadC">⬇️ Download .c file</button>
+            <button class="btn download-btn" id="downloadH">⬇️ Download .h file</button>
+
+            <h3 style="margin-top: 20px; margin-bottom: 10px;">Preview:</h3>
+            <pre id="preview"></pre>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const output = document.getElementById('output');
+        const fileInfo = document.getElementById('fileInfo');
+        const preview = document.getElementById('preview');
+        const downloadC = document.getElementById('downloadC');
+        const downloadH = document.getElementById('downloadH');
+
+        let generatedC = '';
+        let generatedH = '';
+        let animName = '';
+
+        // Click to browse
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.json')) {
+                processFile(file);
+            } else {
+                alert('Please drop a JSON file');
+            }
+        });
+
+        // File input
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) processFile(file);
+        });
+
+        function processFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    generateCFiles(json, file.name);
+                } catch (err) {
+                    alert('Error parsing JSON: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function rgb565Convert(r, g, b) {
+            const r5 = (r >> 3) & 0x1F;
+            const g6 = (g >> 2) & 0x3F;
+            const b5 = (b >> 3) & 0x1F;
+            const rgb565 = (r5 << 11) | (g6 << 5) | b5;
+            return [rgb565 & 0xFF, (rgb565 >> 8) & 0xFF];
+        }
+
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            return [
+                parseInt(hex.substr(0, 2), 16),
+                parseInt(hex.substr(2, 2), 16),
+                parseInt(hex.substr(4, 2), 16)
+            ];
+        }
+
+        function generateCFiles(json, filename) {
+            // Get animation name
+            animName = prompt('Enter animation name:', filename.replace('.json', '')) || 'my_anim';
+            animName = animName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+
+            const width = json.width || 466;
+            const height = json.height || 466;
+            const frames = json.frames || [];
+
+            if (frames.length === 0) {
+                alert('No frames found in JSON!');
+                return;
+            }
+
+            // Generate C file
+            let cContent = `/**
+ * @file ${animName}.c
+ * @brief Auto-generated animation from Robot Face Studio
+ * Compatible with LVGL (RGB565 Format)
+ */
+
+#if defined(LV_LVGL_H_INCLUDE_SIMPLE)
+#include "lvgl.h"
+#else
+#include "lvgl/lvgl.h"
+#endif
+
+#ifndef LV_ATTRIBUTE_MEM_ALIGN
+#define LV_ATTRIBUTE_MEM_ALIGN
+#endif
+
+`;
+
+            const frameNames = [];
+
+            frames.forEach((frame, idx) => {
+                const frameName = `${animName}_f${idx}`;
+                frameNames.push(frameName);
+
+                // Create pixel array
+                const pixels = new Array(width * height).fill([0, 0, 0]);
+
+                // Fill pixels from JSON
+                if (frame.pixels) {
+                    frame.pixels.forEach(p => {
+                        if (p && p.i !== undefined && p.c) {
+                            pixels[p.i] = hexToRgb(p.c);
+                        }
+                    });
+                }
+
+                // Convert to RGB565
+                cContent += `const LV_ATTRIBUTE_MEM_ALIGN uint8_t ${frameName}_map[] = {\\n`;
+
+                let line = '    ';
+                let byteCount = 0;
+
+                pixels.forEach(([r, g, b]) => {
+                    const [low, high] = rgb565Convert(r, g, b);
+                    line += `0x${low.toString(16).padStart(2, '0')}, 0x${high.toString(16).padStart(2, '0')}, `;
+                    byteCount += 2;
+
+                    if (byteCount >= 24) {
+                        cContent += line + '\\n';
+                        line = '    ';
+                        byteCount = 0;
+                    }
+                });
+
+                if (line.trim() !== '') {
+                    cContent += line + '\\n';
+                }
+
+                cContent += `};\\n\\n`;
+
+                cContent += `const lv_img_dsc_t ${frameName} = {
+    .header.always_zero = 0,
+    .header.w = ${width},
+    .header.h = ${height},
+    .data_size = ${width * height * 2},
+    .header.cf = LV_IMG_CF_TRUE_COLOR,
+    .data = ${frameName}_map,
+};
+
+`;
+            });
+
+            cContent += `const lv_img_dsc_t* ${animName}_frames[] = {\\n`;
+            frameNames.forEach(name => {
+                cContent += `    &${name},\\n`;
+            });
+            cContent += `};\\n\\n`;
+            cContent += `const uint8_t ${animName}_frame_count = ${frames.length};\\n`;
+
+            // Generate H file
+            const hContent = `/**
+ * @file ${animName}.h
+ * @brief Header for ${animName}.c
+ */
+
+#ifndef ${animName.toUpperCase()}_H
+#define ${animName.toUpperCase()}_H
+
+#include "lvgl/lvgl.h"
+
+extern const lv_img_dsc_t* ${animName}_frames[];
+extern const uint8_t ${animName}_frame_count;
+
+#endif // ${animName.toUpperCase()}_H
+`;
+
+            generatedC = cContent;
+            generatedH = hContent;
+
+            // Show output
+            fileInfo.innerHTML = `
+                <strong>Animation:</strong> ${animName}<br>
+                <strong>Size:</strong> ${width}x${height}<br>
+                <strong>Frames:</strong> ${frames.length}
+            `;
+
+            preview.textContent = cContent.substring(0, 2000) + '\\n\\n... (truncated)';
+            output.classList.add('show');
+        }
+
+        downloadC.addEventListener('click', () => {
+            downloadFile(generatedC, `${animName}.c`, 'text/plain');
+        });
+
+        downloadH.addEventListener('click', () => {
+            downloadFile(generatedH, `${animName}.h`, 'text/plain');
+        });
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+
+</html>

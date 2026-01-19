@@ -14,6 +14,7 @@
 #include "freertos/task.h"
 
 #include "esp_lcd_sh8601.h"
+#include "esp_wifi_bsp.h"
 #include "lv_demos.h"
 #include "lvgl.h"
 #include "read_lcd_id_bsp.h"
@@ -318,27 +319,32 @@ void app_main(void) {
   if (example_lvgl_lock(-1)) {
     ui_robo_eyes_init();
 
-    // Initialize settings screen and connect brightness callback
-    ui_settings_init();
+    // Initialize NVS FIRST (before loading any settings)
+    nvs_flash_Init();
+
+    // Set brightness callback BEFORE initializing settings
+    // so it's ready when we apply loaded settings
     ui_settings_set_brightness_cb(setBrightnes);
 
-    // Set default brightness to 35 (approx 14% of 255)
-    // Range is 0-255, so 35/100 * 255 = 89
-    // Wait, user likely means value 35 out of 255 or 35%?
-    // Assuming 35% based on previous context, but user said "35" explicitly.
-    // If it's raw value, 35 is very dim (35/255 = 13%).
-    // If it's percent, 35% = 89.
-    // Let's assume user means raw value 35 if they specify a number?
-    // Or percent? "Brightness set to 35" usually implies percent in UI.
-    // However, looking at setBrightnes(uint8_t brig), it takes a byte.
-    // Let's use 35 directly or convert?
-    // User request: "Brightnes 35" (Thai: "Brightnes initial 35")
-    // Previous chats used 50%. Let's set the raw value to match UI slider if
-    // possible. But safely, let's set it to valid visible value. Let's call
-    // setBrightnes(89); // 35% OR setBrightnes(35); // 35 raw value (dim) Let's
-    // interpret as 35% = 89.
+    // Initialize settings screen (loads from NVS and applies)
+    ui_settings_init();
 
-    setBrightnes(89); // Set to 35% brightness
+    // Initialize WiFi (uses NVS but doesn't erase since already init)
+    espwifi_Init();
+
+    // Connect WiFi BSP callbacks to UI
+    espwifi_set_callbacks(
+        ui_settings_wifi_add_network,   // Scan result callback
+        ui_settings_wifi_update_status, // Status change callback
+        ui_settings_wifi_clear_networks // Clear networks callback
+    );
+
+    // Connect UI callbacks to WiFi BSP
+    ui_settings_wifi_set_scan_cb(espwifi_scan);
+    ui_settings_wifi_set_connect_cb(espwifi_connect);
+
+    // Note: Brightness is now loaded from NVS and applied in ui_settings_init()
+    // Default is 35% (89/255) if no saved value exists
 
     // Release the mutex
     example_lvgl_unlock();

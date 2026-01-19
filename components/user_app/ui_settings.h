@@ -38,6 +38,45 @@ bool ui_settings_is_visible(void);
  */
 void ui_settings_set_brightness_cb(void (*cb)(uint8_t));
 
+/**
+ * @brief Update WiFi status display
+ * @param connected True if connected
+ * @param ssid Network name (can be NULL)
+ * @param ip IP address string (can be NULL)
+ */
+void ui_settings_wifi_update_status(bool connected, const char *ssid,
+                                    const char *ip);
+
+/**
+ * @brief Add a WiFi network to the available list
+ * @param ssid Network name
+ * @param rssi Signal strength
+ */
+void ui_settings_wifi_add_network(const char *ssid, int rssi);
+
+/**
+ * @brief Clear the WiFi network list
+ */
+void ui_settings_wifi_clear_networks(void);
+
+/**
+ * @brief Set callback for WiFi scan trigger
+ */
+void ui_settings_wifi_set_scan_cb(void (*cb)(void));
+
+/**
+ * @brief Set callback when user selects a WiFi network
+ * @param cb Callback function that receives the selected SSID and password
+ */
+void ui_settings_wifi_set_connect_cb(void (*cb)(const char *ssid,
+                                                const char *password));
+
+/**
+ * @brief Create WiFi status indicator on any screen
+ * @param parent Parent screen object to attach indicator to
+ */
+void ui_settings_create_wifi_indicator_on(lv_obj_t *parent);
+
 #ifdef __cplusplus
 }
 #endif

@@ -29,6 +29,7 @@ typedef enum {
   EMOTION_ANGRY,      // Small intense with top mask
   EMOTION_SURPRISED,  // Large round circles
   EMOTION_SKEPTIC,    // Asymmetric, one squinted
+  EMOTION_CUSTOM,     // Loaded from custom_anim.c
   EMOTION_MAX
 } robot_emotion_t;
 
@@ -66,6 +67,12 @@ void ui_robo_eyes_blink(void);
  * @return Current emotion type
  */
 robot_emotion_t ui_robo_eyes_get_emotion(void);
+
+/**
+ * @brief Get the main robot eyes screen object
+ * @return lv_obj_t* Pointer to the screen
+ */
+lv_obj_t *ui_robo_eyes_get_scr(void);
 
 #ifdef __cplusplus
 }

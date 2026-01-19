@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "width": 466,
+  "height": 466,
+  "fps": 12,
+  "frames": [
+    {
+      "index": 0,
+      "duration": 760,
+      "pixels": [],
+      "shapes": [
+        {
+          "type": "ellipse",
+          "x": 92,
+          "y": 114,
+          "width": 70,
+          "height": 184,
+          "color": "#00ffff",
+          "opacity": 1,
+          "blendMode": "source-over",
+          "rotation": 0,
+          "lineEnd": null,
+          "id": 1768779239802.6262
+        },
+        {
+          "type": "ellipse",
+          "x": 287,
+          "y": 108,
+          "width": 69,
+          "height": 199,
+          "color": "#00ffff",
+          "opacity": 1,
+          "blendMode": "source-over",
+          "rotation": 0,
+          "lineEnd": null,
+          "id": 1768779241122.7498
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "duration": 770,
+      "pixels": [],
+      "shapes": [
+        {
+          "type": "ellipse",
+          "x": 66,
+          "y": 88,
+          "width": 147,
+          "height": 263,
+          "color": "#00ffff",
+          "opacity": 1,
+          "blendMode": "source-over",
+          "rotation": 0,
+          "lineEnd": null,
+          "id": 1768779239802.6262
+        },
+        {
+          "type": "ellipse",
+          "x": 248,
+          "y": 79,
+          "width": 143,
+          "height": 267,
+          "color": "#00ffff",
+          "opacity": 1,
+          "blendMode": "source-over",
+          "rotation": 0,
+          "lineEnd": null,
+          "id": 1768779241122.7498
+        }
+      ]
+    }
+  ]
+}
