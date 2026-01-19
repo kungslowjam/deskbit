@@ -16,14 +16,43 @@
 #define ANIM_MANAGER_H
 
 #include "lvgl.h"
+#include "ui_custom_anim.h" // Use shape_type_t from here
 #include <stdbool.h>
+
+// Shape definition for vector animations
+typedef struct {
+  uint8_t type; // shape_type_t from ui_custom_anim.h
+  float x, y, w, h;
+  float rotation;
+  uint32_t color; // HEX Color (e.g. 0xFFFFFF)
+  float opacity;
+  float x2, y2;      // Extra coords for lines
+  const char *text;  // Text content for SHAPE_TEXT
+  uint8_t font_size; // Font size for text (8, 12, 16, 20, etc.)
+} anim_shape_t;
+
+// Vector Frame
+typedef struct {
+  const anim_shape_t *shapes;
+  uint16_t shape_count;
+  uint16_t duration_ms;
+} anim_vector_frame_t;
+
+// Vector Animation
+typedef struct {
+  const char *name;
+  const anim_vector_frame_t *frames;
+  uint16_t frame_count;
+} anim_vector_t;
 
 // Animation info structure
 typedef struct {
   const char *name;
-  const lv_img_dsc_t **frames;
+  const lv_img_dsc_t **frames; // Existing bitmap support
+  const anim_vector_t *vector; // New vector support
   uint8_t frame_count;
   uint16_t default_duration_ms;
+  bool is_vector;
 } anim_info_t;
 
 /**
@@ -42,6 +71,13 @@ void anim_manager_init(lv_obj_t *parent);
  */
 bool anim_manager_register(const char *name, const lv_img_dsc_t **frames,
                            uint8_t frame_count, uint16_t duration_ms);
+
+/**
+ * @brief Register a new vector animation
+ * @param vector Vector animation data
+ * @return true if registered successfully
+ */
+bool anim_manager_register_vector(const anim_vector_t *vector);
 
 /**
  * @brief Play an animation by name

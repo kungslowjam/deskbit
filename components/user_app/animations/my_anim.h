@@ -1,14 +1,8 @@
-/**
- * @file my_anim.h
- * @brief Header for my_anim.c
- */
-
 #ifndef MY_ANIM_H
 #define MY_ANIM_H
 
-#include "lvgl/lvgl.h"
+#include "anim_manager.h"
 
-extern const lv_img_dsc_t* my_anim_frames[];
-extern const uint8_t my_anim_frame_count;
+extern const anim_vector_t my_anim_data;
 
-#endif // MY_ANIM_H
+#endif

@@ -1035,38 +1035,69 @@ function setupEventListeners() {
             isResizingShape = false;
             activeHandle = null;
             renderTimeline();
+            updateLayersPanel(); // Ensure panel syncs
             return;
         }
 
         if (isDraggingShape) {
             isDraggingShape = false;
             renderTimeline();
+            updateLayersPanel(); // Ensure panel syncs
             return;
         }
 
         if (isDrawingShape) {
+            const frame = frames[currentFrameIndex];
+
+            // Pixel Shapes (Direct Draw)
             if (['line', 'rect', 'circle'].includes(currentTool)) {
                 if (currentTool === 'line') drawLineOnFrame(startX, startY, coords.x, coords.y, currentColor);
                 else if (currentTool === 'rect') drawRectOnFrame(startX, startY, coords.x, coords.y, currentColor);
                 else if (currentTool === 'circle') drawCircleOnFrame(startX, startY, coords.x, coords.y, currentColor);
-            } else {
-                // Object shapes
-                const frame = frames[currentFrameIndex];
+            }
+            // Vector Objects
+            else {
+                // Normalize dimensions (handle dragging backwards)
+                const x = Math.min(startX, coords.x);
+                const y = Math.min(startY, coords.y);
+                const w = Math.abs(coords.x - startX);
+                const h = Math.abs(coords.y - startY);
+
+                let newShape = null;
+
                 if (currentTool === 'rect-obj') {
-                    frame.shapes.push(new Shape('rect', startX, startY, coords.x - startX, coords.y - startY, currentColor));
+                    // Prevent tiny accidental clicks
+                    if (w > 2 || h > 2) {
+                        newShape = new Shape('rect', x, y, w, h, currentColor);
+                    }
                 } else if (currentTool === 'ellipse-obj') {
-                    // Normalize dimensions
-                    const x = Math.min(startX, coords.x);
-                    const y = Math.min(startY, coords.y);
-                    const w = Math.abs(coords.x - startX);
-                    const h = Math.abs(coords.y - startY);
-                    frame.shapes.push(new Shape('ellipse', x, y, w, h, currentColor));
+                    if (w > 2 || h > 2) {
+                        newShape = new Shape('ellipse', x, y, w, h, currentColor);
+                    }
                 } else if (currentTool === 'line-obj') {
-                    const s = new Shape('line', startX, startY, 0, 0, currentColor);
-                    s.lineEnd = { x: coords.x, y: coords.y };
-                    frame.shapes.push(s);
+                    newShape = new Shape('line', startX, startY, 0, 0, currentColor);
+                    newShape.lineEnd = { x: coords.x, y: coords.y };
+                    // Recalculate bounds for line
+                    newShape.width = Math.abs(coords.x - startX);
+                    newShape.height = Math.abs(coords.y - startY);
+                    newShape.x = Math.min(startX, coords.x);
+                    newShape.y = Math.min(startY, coords.y);
+                } else if (currentTool === 'text-obj') {
+                    // Text is special: Click to place, then prompt
+                    const text = prompt("Enter text:", "TEXT");
+                    if (text) {
+                        newShape = new TextShape(coords.x, coords.y, text, 20, currentColor);
+                    }
+                }
+
+                if (newShape) {
+                    saveUndo(); // Save state before adding
+                    frame.shapes.push(newShape);
+                    selectedShape = newShape; // Auto-select new shape
+                    updateLayersPanel();
                 }
             }
+
             renderEditor();
             renderTimeline();
         }
@@ -1075,7 +1106,32 @@ function setupEventListeners() {
         isDrawingShape = false;
     };
 
+    // Double click to edit text
+    canvas.addEventListener('dblclick', (e) => {
+        const coords = getCoordsFromEvent(e);
+        const frame = frames[currentFrameIndex];
+        if (!frame || !frame.shapes) return;
+
+        // Check shapes in reverse order (top to bottom)
+        for (let i = frame.shapes.length - 1; i >= 0; i--) {
+            const shape = frame.shapes[i];
+            if (shape.containsPoint(coords.x, coords.y)) {
+                if (shape.type === 'text') {
+                    const newText = prompt("Edit text:", shape.text);
+                    if (newText !== null) {
+                        saveUndo();
+                        shape.text = newText;
+                        renderEditor();
+                        updateLayersPanel();
+                    }
+                }
+                break; // Handled top-most shape
+            }
+        }
+    });
+
     canvas.onmouseleave = () => {
+
         isDrawing = false;
         isDrawingShape = false;
         isDraggingShape = false;
@@ -2299,4 +2355,275 @@ function renderPreview(frameIndex, interpolation = null) {
     }
 }
 
+
+// =========================================
+// NEW TOOLS - Redo, Duplicate, Delete, Scale, Align, Layers, Text
+// =========================================
+
+// Redo Stack
+let redoStack = [];
+
+function redo() {
+    if (redoStack.length === 0) return;
+    const state = redoStack.pop();
+    undoStack.push(JSON.stringify(frames[currentFrameIndex]));
+    frames[currentFrameIndex] = JSON.parse(state);
+    // Restore shapes with proper class
+    // Restore shapes with proper class
+    frames[currentFrameIndex].shapes = frames[currentFrameIndex].shapes.map(s => {
+        let shape;
+        if (s.type === 'text') {
+            shape = new TextShape(s.x, s.y, s.text, s.fontSize, s.color);
+        } else {
+            shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
+        }
+
+        shape.rotation = s.rotation || 0;
+        shape.opacity = s.opacity !== undefined ? s.opacity : 1;
+        shape.blendMode = s.blendMode || 'source-over';
+        shape.id = s.id || Date.now() + Math.random(); // Preserve ID if possible
+
+        if (s.lineEnd) shape.lineEnd = s.lineEnd;
+        if (s.type === 'text' && s.text) shape.text = s.text;
+        if (s.type === 'text' && s.fontSize) shape.fontSize = s.fontSize;
+
+        return shape;
+    });
+
+    renderEditor();
+    renderPreview();
+}
+
+function duplicateShape() {
+    if (!selectedShape) {
+        alert('Select a shape first!');
+        return;
+    }
+    const newShape = selectedShape.clone();
+    newShape.x += 20;
+    newShape.y += 20;
+    frames[currentFrameIndex].shapes.push(newShape);
+    selectedShape = newShape;
+    renderEditor();
+    renderPreview();
+    updateLayersPanel();
+}
+
+function deleteShape() {
+    if (!selectedShape) {
+        alert('Select a shape first!');
+        return;
+    }
+    saveUndo();
+    const shapes = frames[currentFrameIndex].shapes;
+    const idx = shapes.findIndex(s => s.id === selectedShape.id);
+    if (idx !== -1) {
+        shapes.splice(idx, 1);
+        selectedShape = null;
+        renderEditor();
+        renderPreview();
+        updateLayersPanel();
+    }
+}
+
+function scaleShape(factor) {
+    if (!selectedShape) {
+        alert('Select a shape first!');
+        return;
+    }
+    saveUndo();
+    selectedShape.width *= factor;
+    selectedShape.height *= factor;
+    renderEditor();
+    renderPreview();
+}
+
+// Align Functions
+function alignShapes(direction) {
+    if (!selectedShape) {
+        alert('Select a shape first!');
+        return;
+    }
+    saveUndo();
+    const bounds = selectedShape.getBounds();
+    switch (direction) {
+        case 'left':
+            selectedShape.x = 0;
+            break;
+        case 'center-h':
+            selectedShape.x = (GRID_WIDTH - bounds.width) / 2;
+            break;
+        case 'right':
+            selectedShape.x = GRID_WIDTH - bounds.width;
+            break;
+        case 'top':
+            selectedShape.y = 0;
+            break;
+        case 'center-v':
+            selectedShape.y = (GRID_HEIGHT - bounds.height) / 2;
+            break;
+        case 'bottom':
+            selectedShape.y = GRID_HEIGHT - bounds.height;
+            break;
+    }
+    renderEditor();
+    renderPreview();
+}
+
+// Layer Management
+function updateLayersPanel() {
+    const listEl = document.getElementById('layers-list');
+    if (!listEl) return;
+
+    const shapes = frames[currentFrameIndex]?.shapes || [];
+
+    if (shapes.length === 0) {
+        listEl.innerHTML = '<div class="layer-item"><span class="layer-icon">○</span><span class="layer-name">No shapes</span></div>';
+        return;
+    }
+
+    listEl.innerHTML = shapes.map((shape, i) => {
+        const icon = shape.type === 'ellipse' ? '○' :
+            shape.type === 'rect' ? '▢' :
+                shape.type === 'line' ? '╱' :
+                    shape.type === 'text' ? 'T' : '?';
+        const isActive = selectedShape && selectedShape.id === shape.id;
+        return `<div class="layer-item ${isActive ? 'active' : ''}" data-index="${i}">
+            <span class="layer-icon">${icon}</span>
+            <span class="layer-name">${shape.type} ${i + 1}</span>
+            <span class="layer-visibility">👁</span>
+        </div>`;
+    }).reverse().join('');
+
+    // Add click handlers
+    listEl.querySelectorAll('.layer-item').forEach(item => {
+        item.onclick = () => {
+            const idx = parseInt(item.dataset.index);
+            selectedShape = frames[currentFrameIndex].shapes[idx];
+            renderEditor();
+            updateLayersPanel();
+        };
+    });
+}
+
+function moveLayerUp() {
+    if (!selectedShape) return;
+    const shapes = frames[currentFrameIndex].shapes;
+    const idx = shapes.findIndex(s => s.id === selectedShape.id);
+    if (idx < shapes.length - 1) {
+        [shapes[idx], shapes[idx + 1]] = [shapes[idx + 1], shapes[idx]];
+        renderEditor();
+        renderPreview();
+        updateLayersPanel();
+    }
+}
+
+function moveLayerDown() {
+    if (!selectedShape) return;
+    const shapes = frames[currentFrameIndex].shapes;
+    const idx = shapes.findIndex(s => s.id === selectedShape.id);
+    if (idx > 0) {
+        [shapes[idx], shapes[idx - 1]] = [shapes[idx - 1], shapes[idx]];
+        renderEditor();
+        renderPreview();
+        updateLayersPanel();
+    }
+}
+
+// Text Shape (for LVGL lv_label)
+class TextShape extends Shape {
+    constructor(x, y, text, fontSize, color) {
+        super('text', x, y, 100, 30, color);
+        this.text = text || 'Text';
+        this.fontSize = fontSize || 16;
+    }
+
+    draw(context) {
+        context.save();
+        context.globalAlpha = this.opacity;
+        context.globalCompositeOperation = this.blendMode;
+        context.fillStyle = this.color;
+        context.font = `${this.fontSize}px Inter, sans-serif`;
+        context.fillText(this.text, this.x, this.y + this.fontSize);
+
+        // Measure for bounds
+        const metrics = context.measureText(this.text);
+        this.width = metrics.width;
+        this.height = this.fontSize * 1.2;
+
+        context.restore();
+    }
+
+    containsPoint(px, py) {
+        return px >= this.x && px <= this.x + this.width &&
+            py >= this.y && py <= this.y + this.height;
+    }
+
+    clone() {
+        const newShape = new TextShape(this.x, this.y, this.text, this.fontSize, this.color);
+        newShape.rotation = this.rotation;
+        newShape.opacity = this.opacity;
+        newShape.blendMode = this.blendMode;
+        newShape.id = Date.now() + Math.random();
+        newShape.width = this.width;
+        newShape.height = this.height;
+        return newShape;
+    }
+}
+
+// Initialize new tool buttons
+document.addEventListener('DOMContentLoaded', () => {
+    // Redo
+    document.getElementById('action-redo')?.addEventListener('click', redo);
+
+    // Shape Actions
+    document.getElementById('action-duplicate')?.addEventListener('click', duplicateShape);
+    document.getElementById('action-delete-shape')?.addEventListener('click', deleteShape);
+    document.getElementById('action-scale-up')?.addEventListener('click', () => scaleShape(1.1));
+    document.getElementById('action-scale-down')?.addEventListener('click', () => scaleShape(0.9));
+
+    // Align Tools
+    document.getElementById('align-left')?.addEventListener('click', () => alignShapes('left'));
+    document.getElementById('align-center-h')?.addEventListener('click', () => alignShapes('center-h'));
+    document.getElementById('align-right')?.addEventListener('click', () => alignShapes('right'));
+    document.getElementById('align-top')?.addEventListener('click', () => alignShapes('top'));
+    document.getElementById('align-center-v')?.addEventListener('click', () => alignShapes('center-v'));
+    document.getElementById('align-bottom')?.addEventListener('click', () => alignShapes('bottom'));
+
+    // Layer Actions
+    document.getElementById('layer-up-btn')?.addEventListener('click', moveLayerUp);
+    document.getElementById('layer-down-btn')?.addEventListener('click', moveLayerDown);
+    document.getElementById('layer-del-btn')?.addEventListener('click', deleteShape);
+
+    // Text Tool
+    document.getElementById('tool-text-obj')?.addEventListener('click', () => {
+        currentTool = 'text-obj';
+        updateToolButtons();
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'y') {
+            e.preventDefault();
+            redo();
+        }
+        if (e.ctrlKey && e.key === 'd') {
+            e.preventDefault();
+            duplicateShape();
+        }
+        if (e.key === 'Delete' && selectedShape) {
+            deleteShape();
+        }
+        if (e.key === 't' && !e.ctrlKey) {
+            currentTool = 'text-obj';
+            updateToolButtons();
+        }
+    });
+});
+
+function updateToolButtons() {
+    document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+    const toolId = 'tool-' + currentTool.replace('-obj', '-obj');
+    document.getElementById(toolId)?.classList.add('active');
+}
 

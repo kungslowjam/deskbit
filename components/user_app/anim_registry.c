@@ -27,7 +27,7 @@
 // ========================================
 
 void register_all_animations(void) {
-    anim_manager_register("my", my_anim_frames, my_anim_frame_count, 500);
+    anim_manager_register_vector(&my_anim_data);
   // Register animations here
   // Format: anim_manager_register(name, frames, frame_count, duration_ms)
 

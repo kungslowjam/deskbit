@@ -2392,7 +2392,7 @@ void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
     hide_angry();
 
     // Start Custom Anim via Manager
-    anim_manager_play("my", 0); // 0 = Infinite loop
+    anim_manager_play("my_anim", 0); // 0 = Infinite loop
 
     /* Legacy deprecated
     if (custom_anim_player) {

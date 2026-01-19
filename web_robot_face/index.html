@@ -79,121 +79,118 @@
                 </div>
             </aside>
 
-            <!-- Left Toolbar -->
+            <!-- Left Toolbar - Redesigned -->
             <aside class="toolbar">
-                <div class="tool-group">
-                    <button class="tool-btn active" id="tool-pen" title="Pen Tool (P)">
-                        ✏️
-                    </button>
-                    <button class="tool-btn" id="tool-brush" title="Brush Tool (B)">
-                        �️
-                    </button>
-                    <button class="tool-btn" id="tool-eraser" title="Eraser Tool (E)">
-                        🧼
-                    </button>
-                    <button class="tool-btn" id="tool-fill" title="Fill Tool (G)">
-                        🪣
-                    </button>
+                <!-- Section: Drawing Tools -->
+                <div class="tool-section">
+                    <span class="section-label">Draw</span>
+                    <div class="tool-row">
+                        <button class="tool-btn active" id="tool-pen" title="Pen (P)">✎</button>
+                        <button class="tool-btn" id="tool-eraser" title="Eraser (E)">◯</button>
+                    </div>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="tool-fill" title="Fill (G)">◉</button>
+                        <button class="tool-btn" id="tool-eyedropper" title="Eyedropper (I)">◎</button>
+                    </div>
                 </div>
 
                 <div class="divider-horizontal"></div>
 
-                <!-- Shape Tools (Object Mode) -->
-                <div class="tool-group">
-                    <button class="tool-btn" id="tool-select" title="Select/Move Tool (V)">
-                        🔲
-                    </button>
-                    <button class="tool-btn" id="tool-rect-obj" title="Rectangle Object (Shift+R)">
-                        ▢
-                    </button>
-                    <button class="tool-btn" id="tool-ellipse-obj" title="Ellipse Object (Shift+O)">
-                        ○
-                    </button>
-                    <button class="tool-btn" id="tool-line-obj" title="Line Object (Shift+L)">
-                        ╱
-                    </button>
+                <!-- Section: Shape Tools -->
+                <div class="tool-section">
+                    <span class="section-label">Shapes</span>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="tool-select" title="Select (V)">⊡</button>
+                        <button class="tool-btn" id="tool-rect-obj" title="Rectangle">▢</button>
+                    </div>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="tool-ellipse-obj" title="Ellipse">○</button>
+                        <button class="tool-btn" id="tool-line-obj" title="Line">╱</button>
+                    </div>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="tool-text-obj" title="Text (T)">T</button>
+                    </div>
                 </div>
 
                 <div class="divider-horizontal"></div>
 
-                <!-- Pixel Shape Tools -->
-                <div class="tool-group">
-                    <button class="tool-btn" id="tool-line" title="Line Pixel (L)">
-                        �
-                    </button>
-                    <button class="tool-btn" id="tool-rect" title="Rectangle Pixel (R)">
-                        ⬜
-                    </button>
-                    <button class="tool-btn" id="tool-circle" title="Circle Pixel (C)">
-                        ⭕
-                    </button>
-                    <button class="tool-btn" id="tool-eyedropper" title="Eyedropper (I)">
-                        💧
-                    </button>
+                <!-- Section: Edit -->
+                <div class="tool-section">
+                    <span class="section-label">Edit</span>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="action-undo" title="Undo (Ctrl+Z)">↶</button>
+                        <button class="tool-btn" id="action-redo" title="Redo (Ctrl+Y)">↷</button>
+                    </div>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="action-duplicate" title="Duplicate (Ctrl+D)">⧉</button>
+                        <button class="tool-btn" id="action-delete-shape" title="Delete (Del)">✕</button>
+                    </div>
                 </div>
 
                 <div class="divider-horizontal"></div>
 
-                <div class="tool-group">
-                    <button class="tool-btn" id="action-clear" title="Clear Frame">
-                        �️
-                    </button>
-                    <button class="tool-btn" id="action-invert" title="Invert Colors">
-                        🌗
-                    </button>
-                    <button class="tool-btn" id="action-undo" title="Undo (Ctrl+Z)">
-                        ↩️
-                    </button>
+                <!-- Section: Transform -->
+                <div class="tool-section">
+                    <span class="section-label">Transform</span>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="action-scale-up" title="Scale Up">＋</button>
+                        <button class="tool-btn" id="action-scale-down" title="Scale Down">－</button>
+                    </div>
                 </div>
 
                 <div class="divider-horizontal"></div>
 
-                <div class="tool-group">
-                    <label style="font-size: 0.7rem; color: #888;">Size</label>
-                    <input type="range" id="brush-size" min="1" max="20" value="1" style="width: 40px;">
-                    <span id="brush-size-value" style="font-size: 0.7rem;">1</span>
+                <!-- Section: Align -->
+                <div class="tool-section">
+                    <span class="section-label">Align</span>
+                    <div class="tool-row">
+                        <button class="tool-btn small" id="align-left" title="Left">⇤</button>
+                        <button class="tool-btn small" id="align-center-h" title="Center H">⇿</button>
+                        <button class="tool-btn small" id="align-right" title="Right">⇥</button>
+                    </div>
+                    <div class="tool-row">
+                        <button class="tool-btn small" id="align-top" title="Top">⤒</button>
+                        <button class="tool-btn small" id="align-center-v" title="Center V">⥯</button>
+                        <button class="tool-btn small" id="align-bottom" title="Bottom">⤓</button>
+                    </div>
+                </div>
+
+                <div class="divider-horizontal"></div>
+
+                <!-- Section: Canvas -->
+                <div class="tool-section">
+                    <span class="section-label">Canvas</span>
+                    <div class="tool-row">
+                        <button class="tool-btn" id="action-clear" title="Clear">⌧</button>
+                        <button class="tool-btn" id="action-invert" title="Invert">◐</button>
+                    </div>
                 </div>
 
                 <div class="divider-horizontal"></div>
 
                 <!-- Color Picker -->
-                <div class="tool-group">
-                    <input type="color" id="color-picker" value="#00d2ff" title="Color">
+                <div class="tool-section">
+                    <span class="section-label">Color</span>
+                    <input type="color" id="color-picker" value="#00d2ff" class="color-input">
                     <div class="color-palette">
-                        <div class="palette-swatch" style="background-color: #00d2ff;" onclick="setColor('#00d2ff')">
-                        </div>
-                        <div class="palette-swatch" style="background-color: #ff0055;" onclick="setColor('#ff0055')">
-                        </div>
-                        <div class="palette-swatch" style="background-color: #00ff66;" onclick="setColor('#00ff66')">
-                        </div>
-                        <div class="palette-swatch" style="background-color: #ffffff;" onclick="setColor('#ffffff')">
-                        </div>
-                        <div class="palette-swatch" style="background-color: #000000;" onclick="setColor('#000000')">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Shape Properties -->
-                <div class="tool-group">
-                    <div class="control-item">
-                        <span class="label">Opacity</span>
-                        <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="1" title="Opacity">
-                    </div>
-                    <div class="control-item">
-                        <span class="label">Blend</span>
-                        <select id="blend-mode-select" title="Blend Mode">
-                            <option value="source-over">Normal</option>
-                            <option value="lighter">Add (Lighter)</option>
-                            <option value="screen">Screen</option>
-                            <option value="multiply">Multiply</option>
-                            <option value="overlay">Overlay</option>
-                            <option value="difference">Difference</option>
-                        </select>
+                        <div class="palette-swatch" style="background:#00ffff;" onclick="setColor('#00ffff')"></div>
+                        <div class="palette-swatch" style="background:#ff0055;" onclick="setColor('#ff0055')"></div>
+                        <div class="palette-swatch" style="background:#00ff66;" onclick="setColor('#00ff66')"></div>
+                        <div class="palette-swatch" style="background:#ffff00;" onclick="setColor('#ffff00')"></div>
+                        <div class="palette-swatch" style="background:#ffffff;" onclick="setColor('#ffffff')"></div>
+                        <div class="palette-swatch" style="background:#000000;" onclick="setColor('#000000')"></div>
                     </div>
                 </div>
 
                 <div class="divider-horizontal"></div>
+
+                <!-- Opacity -->
+                <div class="tool-section">
+                    <span class="section-label">Opacity</span>
+                    <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="1" class="slider-input">
+                </div>
             </aside>
+
 
             <!-- Main Canvas Area -->
             <section class="canvas-area">
@@ -220,6 +217,24 @@
                         <canvas id="preview-canvas" width="150" height="150"></canvas>
                     </div>
                 </div>
+                <!-- Layers Panel -->
+                <div class="panel-section">
+                    <h3>Layers <button id="layer-add-btn" class="btn small"
+                            style="float:right;padding:2px 8px;">+</button></h3>
+                    <div class="layers-list" id="layers-list">
+                        <!-- Layers will be injected by JS -->
+                        <div class="layer-item" data-info="No shapes yet">
+                            <span class="layer-icon">○</span>
+                            <span class="layer-name">Empty</span>
+                        </div>
+                    </div>
+                    <div class="layer-actions" style="display:flex;gap:4px;margin-top:8px;">
+                        <button id="layer-up-btn" class="btn small" title="Move Up">↑</button>
+                        <button id="layer-down-btn" class="btn small" title="Move Down">↓</button>
+                        <button id="layer-del-btn" class="btn small danger" title="Delete">🗑</button>
+                    </div>
+                </div>
+
                 <div class="panel-section">
                     <h3>Frame Info</h3>
                     <div class="prop-row">

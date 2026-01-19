@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "example_qspi_with_ram",
-    "project_version":    "c10967e-dirty",
+    "project_version":    "71bb089-dirty",
     "project_path":       "C:/Users/hello/Desktop/desktop",
     "idf_path":           "C:/Users/hello/esp/v5.5.2/esp-idf",
     "build_dir":          "C:/Users/hello/Desktop/desktop/build",

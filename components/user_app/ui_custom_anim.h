@@ -14,7 +14,12 @@ extern "C" {
 #include <stdbool.h>
 
 // Shape types (must match export)
-typedef enum { SHAPE_RECT = 0, SHAPE_ELLIPSE = 1, SHAPE_LINE = 2 } shape_type_t;
+typedef enum {
+  SHAPE_RECT = 0,
+  SHAPE_ELLIPSE = 1,
+  SHAPE_LINE = 2,
+  SHAPE_TEXT = 3 // Text label (rendered via lv_label)
+} shape_type_t;
 
 // Shape keyframe structure (must match export)
 typedef struct {

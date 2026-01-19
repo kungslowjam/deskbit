@@ -8,7 +8,7 @@ from pathlib import Path
 
 # Import existing logic (reuse your current powerful script)
 try:
-    from export_to_project import generate_c_file, update_cmake, update_registry
+    from export_to_project import generate_c_file, generate_h_file, update_cmake, update_registry
 except ImportError:
     pass
 
@@ -49,6 +49,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 generated_name = generate_c_file(data, anim_dir)
                 
                 if generated_name:
+                    # 1.5. Generate H File
+                    generate_h_file(generated_name, anim_dir)
+                    
                     # 2. Update CMake
                     update_cmake(generated_name, user_app_dir / "CMakeLists.txt")
                     
