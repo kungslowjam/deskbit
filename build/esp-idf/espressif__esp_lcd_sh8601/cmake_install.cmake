@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/managed_components/espressif__esp_lcd_sh8601
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/managed_components/espressif__esp_lcd_sh8601
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

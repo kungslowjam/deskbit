@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/components/qmi8658c
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/components/qmi8658c
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

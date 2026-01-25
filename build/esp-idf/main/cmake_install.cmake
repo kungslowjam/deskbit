@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/main
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/main
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

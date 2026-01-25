@@ -166,17 +166,16 @@ $<TARGET_FILE:__idf_json>
 $<TARGET_FILE:idf::espressif__esp_lcd_sh8601>
 $<TARGET_FILE:__idf_esp_lcd>
 $<TARGET_FILE:idf::espressif2022__image_player>
-$<TARGET_FILE:idf::lvgl>
 $<TARGET_FILE:idf::main>
 $<TARGET_FILE:__idf_espressif__esp_lcd_sh8601>
 $<TARGET_FILE:__idf_espressif2022__image_player>
-$<TARGET_FILE:__idf_lvgl>
 $<TARGET_FILE:idf::adc_bsp>
 $<TARGET_FILE:idf::ble_scan_bsp>
 $<TARGET_FILE:idf::gpio_bsp>
 $<TARGET_FILE:idf::button_bsp>
 $<TARGET_FILE:__idf_gpio_bsp>
 $<TARGET_FILE:idf::esp_wifi_bsp>
+$<TARGET_FILE:idf::lvgl>
 $<TARGET_FILE:idf::touch_bsp>
 $<TARGET_FILE:idf::pcf85063>
 $<TARGET_FILE:__idf_touch_bsp>
@@ -185,6 +184,7 @@ $<TARGET_FILE:idf::read_lcd_id_bsp>
 $<TARGET_FILE:idf::sd_card_bsp>
 $<TARGET_FILE:__idf_fatfs>
 $<TARGET_FILE:idf::ui_bsp>
+$<TARGET_FILE:__idf_lvgl>
 $<TARGET_FILE:idf::user_app>
 $<TARGET_FILE:__idf_ui_bsp>
 $<TARGET_FILE:__idf_pcf85063>

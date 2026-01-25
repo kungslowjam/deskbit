@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/managed_components/espressif__cmake_utilities
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/managed_components/espressif__cmake_utilities
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

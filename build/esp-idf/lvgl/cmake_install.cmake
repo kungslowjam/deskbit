@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/components/lvgl
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/components/lvgl
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

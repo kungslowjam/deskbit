@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/components/touch_bsp
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/components/touch_bsp
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

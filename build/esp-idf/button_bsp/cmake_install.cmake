@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/components/button_bsp
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/components/button_bsp
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

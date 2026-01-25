@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/components/sd_card_bsp
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/components/sd_card_bsp
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

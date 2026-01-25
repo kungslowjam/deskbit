@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/hello/Desktop/desktop/managed_components/espressif2022__image_player
+# Install script for directory: C:/Users/hello/Desktop/desktop/deskbit/managed_components/espressif2022__image_player
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
