@@ -9,6 +9,8 @@ let isDrawing = false;
 let isPlaying = false;
 let currentTool = 'pen';
 let currentColor = '#00ffff';
+let lastCoords = null; // Track latest mouse coords for sync drawing
+
 
 // Multi-Select & Clipboard
 let selectedFrames = [];
@@ -112,12 +114,19 @@ class Shape {
         context.strokeStyle = this.color;
         context.lineWidth = 2;
 
+        // Apply rotation around the center of the shape
+        if (this.rotation !== 0) {
+            context.translate(this.x + this.width / 2, this.y + this.height / 2);
+            context.rotate((this.rotation * Math.PI) / 180);
+            context.translate(-(this.x + this.width / 2), -(this.y + this.height / 2));
+        }
+
         if (this.type === 'rect') {
             context.fillRect(this.x, this.y, this.width, this.height);
         } else if (this.type === 'ellipse') {
             context.beginPath();
             context.ellipse(this.x + this.width / 2, this.y + this.height / 2,
-                this.width / 2, this.height / 2, 0, 0, Math.PI * 2);
+                Math.abs(this.width / 2), Math.abs(this.height / 2), 0, 0, Math.PI * 2);
             context.fill();
         } else if (this.type === 'line' && this.lineEnd) {
             context.beginPath();
@@ -145,14 +154,22 @@ function setColor(color) {
     const picker = document.getElementById('color-picker');
     if (picker) picker.value = color;
 
-    // Update palette swatch highlighting
-    document.querySelectorAll('.palette-swatch').forEach(swatch => {
+    // Update preset highlighting
+    document.querySelectorAll('.color-preset').forEach(swatch => {
         swatch.classList.remove('active');
-        if (swatch.style.backgroundColor === color ||
-            rgbToHex(swatch.style.backgroundColor) === color.toLowerCase()) {
+        // Match both exact and computed background color
+        const swatchColor = rgbToHex(swatch.style.backgroundColor);
+        if (swatchColor === color.toLowerCase()) {
             swatch.classList.add('active');
         }
     });
+
+    // Update secondary active indicator (if text or shape is selected)
+    if (selectedShape) {
+        selectedShape.color = color;
+        renderEditor();
+        renderPreview();
+    }
 }
 
 // Helper to convert rgb to hex
@@ -189,11 +206,7 @@ function init() {
 
             const toolName = btnId.replace('tool-', '');
             currentTool = toolName;
-
-            document.querySelectorAll('.tool-btn').forEach(b => {
-                if (!b.id.startsWith('action-')) b.classList.remove('active');
-            });
-            e.currentTarget.classList.add('active');
+            updateToolButtons();
         });
     });
 
@@ -477,7 +490,6 @@ function renderTimeline() {
 
             e.stopPropagation();
             currentFrameIndex = index;
-            selectedFrames = [index];
             renderTimeline();
             renderEditor();
         };
@@ -486,7 +498,6 @@ function renderTimeline() {
         const handle = document.createElement('div');
         handle.className = 'resize-handle';
         handle.dataset.index = index;
-        handle.innerHTML = '⋮⋮'; // Visual indicator
 
         // Resize drag handlers
         handle.onmousedown = (e) => {
@@ -733,8 +744,8 @@ function paint(x, y) {
         drawBrush(x, y, null, brushSize);
     } else if (currentTool === 'fill') {
         floodFill(x, y, currentColor);
-        renderEditor();
     }
+    renderEditor(); // This will also call renderPreview
 }
 
 function drawBrush(cx, cy, color, size) {
@@ -987,6 +998,8 @@ function setupEventListeners() {
     canvas.onmousemove = (e) => {
         if (!frames[currentFrameIndex]) return;
         const coords = getCoordsFromEvent(e);
+        lastCoords = coords; // Save for preview sync
+
 
         // Resize Shape
         if (isResizingShape && selectedShape) {
@@ -1069,6 +1082,8 @@ function setupEventListeners() {
                 ctx.stroke();
             }
             ctx.restore();
+            // Sync preview with current editor state (including the ghost shape)
+            renderPreview();
         }
 
         // Cursor updates for handles
@@ -1359,23 +1374,18 @@ function setPixelSafe(x, y, color) {
 // Toggle Round Mode
 function toggleRound(isRound) {
     const wrapper = document.getElementById('canvas-wrapper');
-    const preview = document.querySelector('.preview-box');
+    const previewContainer = document.getElementById('preview-container');
 
     if (wrapper) {
-        if (isRound) {
-            wrapper.classList.add('canvas-round');
-        } else {
-            wrapper.classList.remove('canvas-round');
-        }
+        if (isRound) wrapper.classList.add('canvas-round');
+        else wrapper.classList.remove('canvas-round');
     }
 
-    if (preview) {
+    if (previewContainer) {
         if (isRound) {
-            preview.style.borderRadius = '50%';
-            preview.style.overflow = 'hidden';
+            previewContainer.classList.add('canvas-round');
         } else {
-            preview.style.borderRadius = 'var(--radius-sm)';
-            preview.style.overflow = 'visible';
+            previewContainer.classList.remove('canvas-round');
         }
     }
 }
@@ -1563,23 +1573,23 @@ function lerp(start, end, t) {
 }
 
 function renderPreview(frameIndex, interpolation = null) {
+    if (!previewCanvas || !previewCtx) return;
+
+    // Use current frame by default
     if (frameIndex === undefined) frameIndex = currentFrameIndex;
     const frame = frames[frameIndex];
     if (!frame) return;
 
-    previewCanvas.width = GRID_WIDTH;
-    previewCanvas.height = GRID_HEIGHT;
-
     const pCtx = previewCtx;
+    pCtx.save();
 
-    // 1. Clear text/bg
+    // 1. Clear with Background
     pCtx.fillStyle = '#000000';
     pCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
 
     // 2. Render Pixels
     const imgData = pCtx.createImageData(GRID_WIDTH, GRID_HEIGHT);
     const data = imgData.data;
-
     for (let i = 0; i < frame.pixels.length; i++) {
         const color = frame.pixels[i];
         if (color) {
@@ -1587,58 +1597,20 @@ function renderPreview(frameIndex, interpolation = null) {
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
             const idx = i * 4;
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
+            data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
         }
     }
     pCtx.putImageData(imgData, 0, 0);
 
-    // 3. Helper to draw any shape properties
-    const drawShapeProps = (ctx, props) => {
-        ctx.save();
-        ctx.globalAlpha = props.opacity !== undefined ? props.opacity : 1;
-        ctx.globalCompositeOperation = props.blendMode || 'source-over';
-        ctx.fillStyle = props.color;
-        ctx.strokeStyle = props.color;
-        ctx.lineWidth = 2;
-
-        if (props.type === 'rect') {
-            ctx.fillRect(props.x, props.y, props.width, props.height);
-        } else if (props.type === 'ellipse') {
-            ctx.beginPath();
-            ctx.ellipse(
-                props.x + props.width / 2,
-                props.y + props.height / 2,
-                Math.abs(props.width / 2),
-                Math.abs(props.height / 2),
-                0, 0, Math.PI * 2
-            );
-            ctx.fill();
-        } else if (props.type === 'line' && props.lineEnd) {
-            ctx.beginPath();
-            ctx.moveTo(props.x, props.y);
-            ctx.lineTo(props.lineEnd.x, props.lineEnd.y);
-            ctx.stroke();
-        }
-        ctx.restore();
-    };
-
-    // 4. Render Shapes (Interpolated if needed)
+    // 3. Render Shapes
     if (frame.shapes && frame.shapes.length > 0) {
-        // Reset context globally first just in case
-        pCtx.globalAlpha = 1.0;
-        pCtx.globalCompositeOperation = 'source-over';
-
         frame.shapes.forEach(shape => {
-            let props = shape; // Default to current shape
+            let props = shape;
 
             // Interpolation Logic
             if (interpolation && interpolation.nextFrame && interpolation.t > 0) {
                 const nextShape = interpolation.nextFrame.shapes.find(s => s.id === shape.id);
                 if (nextShape && nextShape.type === shape.type) {
-                    // Create interpolated properties
                     props = {
                         type: shape.type,
                         x: lerp(shape.x, nextShape.x, interpolation.t),
@@ -1646,27 +1618,66 @@ function renderPreview(frameIndex, interpolation = null) {
                         width: lerp(shape.width, nextShape.width, interpolation.t),
                         height: lerp(shape.height, nextShape.height, interpolation.t),
                         color: shape.color,
-                        opacity: lerp(
-                            shape.opacity !== undefined ? shape.opacity : 1,
-                            nextShape.opacity !== undefined ? nextShape.opacity : 1,
-                            interpolation.t
-                        ),
+                        opacity: lerp(shape.opacity || 1, nextShape.opacity || 1, interpolation.t),
                         blendMode: shape.blendMode,
-                        lineEnd: null
-                    };
-
-                    if (shape.type === 'line' && shape.lineEnd && nextShape.lineEnd) {
-                        props.lineEnd = {
+                        text: shape.text,
+                        fontSize: shape.fontSize,
+                        lineEnd: (shape.type === 'line' && shape.lineEnd && nextShape.lineEnd) ? {
                             x: lerp(shape.lineEnd.x, nextShape.lineEnd.x, interpolation.t),
                             y: lerp(shape.lineEnd.y, nextShape.lineEnd.y, interpolation.t)
-                        };
-                    }
+                        } : null
+                    };
                 }
             }
 
-            drawShapeProps(pCtx, props);
+            // Re-use Shape.draw logic if it's a real instance, otherwise use a proxy
+            if (typeof shape.draw === 'function' && !interpolation) {
+                shape.draw(pCtx);
+            } else {
+                // Manual draw for interpolated or non-method objects
+                pCtx.save();
+                pCtx.globalAlpha = props.opacity !== undefined ? props.opacity : 1;
+                pCtx.globalCompositeOperation = props.blendMode || 'source-over';
+                pCtx.fillStyle = props.color;
+                pCtx.strokeStyle = props.color;
+                pCtx.lineWidth = 2;
+
+                if (props.type === 'rect') {
+                    pCtx.fillRect(props.x, props.y, props.width, props.height);
+                } else if (props.type === 'ellipse') {
+                    pCtx.beginPath();
+                    pCtx.ellipse(props.x + props.width / 2, props.y + props.height / 2, Math.abs(props.width / 2), Math.abs(props.height / 2), 0, 0, Math.PI * 2);
+                    pCtx.fill();
+                } else if (props.type === 'line' && props.lineEnd) {
+                    pCtx.beginPath(); pCtx.moveTo(props.x, props.y); pCtx.lineTo(props.lineEnd.x, props.lineEnd.y); pCtx.stroke();
+                } else if (props.type === 'text') {
+                    pCtx.font = `${props.fontSize || 16}px Inter, sans-serif`;
+                    pCtx.fillText(props.text || '', props.x, props.y + (props.fontSize || 16));
+                }
+                pCtx.restore();
+            }
         });
     }
+
+    // 4. Ghost Shape (Sync drawing)
+    const isDrawing = document.body.classList.contains('drawing-tool-active'); // We should check a variable instead
+    // Since we are in script.js, let's just check the existing boolean
+    if (typeof isDrawingShape !== 'undefined' && isDrawingShape && lastCoords) {
+        pCtx.strokeStyle = currentColor;
+        pCtx.fillStyle = currentColor;
+        pCtx.globalAlpha = 0.5;
+
+        if (currentTool.includes('line')) {
+            pCtx.beginPath(); pCtx.moveTo(startX, startY); pCtx.lineTo(lastCoords.x, lastCoords.y); pCtx.stroke();
+        } else if (currentTool.includes('rect')) {
+            pCtx.strokeRect(startX, startY, lastCoords.x - startX, lastCoords.y - startY);
+        } else if (currentTool.includes('circle') || currentTool.includes('ellipse')) {
+            const w = lastCoords.x - startX; const h = lastCoords.y - startY;
+            pCtx.beginPath(); pCtx.ellipse(startX + w / 2, startY + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2); pCtx.stroke();
+        }
+    }
+
+    pCtx.restore();
 }
 
 // ======== ZOOM CONTROLS ========
@@ -2391,6 +2402,14 @@ function renderPreview(frameIndex, interpolation = null) {
             const y = props.y || 0;
             const w = props.width || 0;
             const h = props.height || 0;
+            const rotation = props.rotation || 0;
+
+            // Apply rotation around the center of the shape
+            if (rotation !== 0) {
+                ctx.translate(x + w / 2, y + h / 2);
+                ctx.rotate((rotation * Math.PI) / 180);
+                ctx.translate(-(x + w / 2), -(y + h / 2));
+            }
 
             if (props.type === 'rect') {
                 ctx.fillRect(x, y, w, h);
@@ -2431,6 +2450,7 @@ function renderPreview(frameIndex, interpolation = null) {
                             y: lerp(shape.y, nextShape.y, interpolation.t),
                             width: lerp(shape.width, nextShape.width, interpolation.t),
                             height: lerp(shape.height, nextShape.height, interpolation.t),
+                            rotation: lerp(shape.rotation || 0, nextShape.rotation || 0, interpolation.t),
                             color: shape.color,
                             opacity: lerp(
                                 shape.opacity !== undefined ? shape.opacity : 1,
@@ -2715,7 +2735,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function updateToolButtons() {
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-    const toolId = 'tool-' + currentTool.replace('-obj', '-obj');
+    const toolId = 'tool-' + currentTool;
     document.getElementById(toolId)?.classList.add('active');
 }
 
