@@ -6,160 +6,136 @@
 #include "anim_manager.h"
 
 static const anim_shape_t my_anim_f0_shapes[] = {
-    { SHAPE_ELLIPSE, 76.00f, 85.00f, 130.00f, 258.00f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 256.00f, 68.00f, 121.00f, 272.00f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 66.00f, 82.00f, 164.00f, 281.00f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 264.00f, 72.00f, 148.00f, 291.00f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f1_shapes[] = {
-    { SHAPE_ELLIPSE, 83.32f, 91.31f, 124.14f, 246.63f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 254.99f, 74.08f, 116.16f, 262.77f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 72.36f, 88.27f, 158.00f, 266.84f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 263.19f, 79.80f, 143.79f, 275.14f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f2_shapes[] = {
-    { SHAPE_ELLIPSE, 90.64f, 97.61f, 118.29f, 235.25f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 253.97f, 80.16f, 111.32f, 253.53f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 78.72f, 94.54f, 151.99f, 252.68f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 262.39f, 87.59f, 139.58f, 259.28f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f3_shapes[] = {
-    { SHAPE_ELLIPSE, 97.96f, 103.92f, 112.43f, 223.88f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 252.96f, 86.24f, 106.47f, 244.30f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 85.09f, 100.82f, 145.99f, 238.53f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 261.58f, 95.39f, 135.37f, 243.42f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f4_shapes[] = {
-    { SHAPE_ELLIPSE, 105.28f, 110.23f, 106.58f, 212.50f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 251.95f, 92.32f, 101.63f, 235.06f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 91.45f, 107.09f, 139.99f, 224.37f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 260.77f, 103.18f, 131.15f, 227.56f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f5_shapes[] = {
-    { SHAPE_ELLIPSE, 112.60f, 116.53f, 100.72f, 201.13f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 250.93f, 98.41f, 96.79f, 225.83f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 97.81f, 113.36f, 133.98f, 210.21f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 259.97f, 110.98f, 126.94f, 211.70f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f6_shapes[] = {
-    { SHAPE_ELLIPSE, 119.92f, 122.84f, 94.86f, 189.76f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 249.92f, 104.49f, 91.95f, 216.59f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 104.17f, 119.63f, 127.98f, 196.05f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 259.16f, 118.77f, 122.73f, 195.84f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f7_shapes[] = {
-    { SHAPE_ELLIPSE, 127.24f, 129.14f, 89.01f, 178.38f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 248.91f, 110.57f, 87.10f, 207.36f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 110.53f, 125.91f, 121.97f, 181.90f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 258.35f, 126.57f, 118.52f, 179.98f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f8_shapes[] = {
-    { SHAPE_ELLIPSE, 134.56f, 135.45f, 83.15f, 167.01f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 247.89f, 116.65f, 82.26f, 198.13f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 116.90f, 132.18f, 115.97f, 167.74f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 257.55f, 134.37f, 114.31f, 164.12f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f9_shapes[] = {
-    { SHAPE_ELLIPSE, 140.49f, 140.56f, 78.41f, 157.79f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 247.07f, 121.58f, 78.34f, 190.64f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 123.26f, 138.45f, 109.97f, 153.58f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 256.74f, 142.16f, 110.10f, 148.26f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f10_shapes[] = {
-    { SHAPE_ELLIPSE, 136.26f, 136.92f, 81.79f, 164.36f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 247.66f, 118.06f, 81.14f, 195.98f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 129.62f, 144.72f, 103.96f, 139.42f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 255.94f, 149.96f, 105.89f, 132.40f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f11_shapes[] = {
-    { SHAPE_ELLIPSE, 132.03f, 133.27f, 85.18f, 170.94f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 248.24f, 114.55f, 83.93f, 201.32f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 135.98f, 151.00f, 97.96f, 125.27f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 255.13f, 157.75f, 101.67f, 116.54f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f12_shapes[] = {
-    { SHAPE_ELLIPSE, 127.80f, 129.62f, 88.56f, 177.52f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 248.83f, 111.03f, 86.73f, 206.66f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 130.63f, 145.72f, 103.01f, 137.18f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 255.81f, 151.19f, 105.22f, 129.88f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f13_shapes[] = {
-    { SHAPE_ELLIPSE, 123.57f, 125.98f, 91.95f, 184.09f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 249.41f, 107.52f, 89.53f, 211.99f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 123.04f, 138.24f, 110.17f, 154.06f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 256.77f, 141.90f, 110.24f, 148.79f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f14_shapes[] = {
-    { SHAPE_ELLIPSE, 119.33f, 122.33f, 95.33f, 190.67f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 250.00f, 104.00f, 92.33f, 217.33f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 115.46f, 130.76f, 117.33f, 170.94f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 257.73f, 132.60f, 115.26f, 167.71f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f15_shapes[] = {
-    { SHAPE_ELLIPSE, 115.10f, 118.69f, 98.72f, 197.24f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 250.59f, 100.48f, 95.13f, 222.67f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 107.87f, 123.28f, 124.49f, 187.82f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 258.69f, 123.31f, 120.28f, 186.62f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f16_shapes[] = {
-    { SHAPE_ELLIPSE, 110.87f, 115.04f, 102.10f, 203.82f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 251.17f, 96.97f, 97.93f, 228.01f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 100.29f, 115.80f, 131.65f, 204.70f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 259.65f, 114.01f, 125.30f, 205.53f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f17_shapes[] = {
-    { SHAPE_ELLIPSE, 106.64f, 111.40f, 105.49f, 210.39f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 251.76f, 93.45f, 100.73f, 233.35f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 92.70f, 108.32f, 138.80f, 221.58f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 260.62f, 104.72f, 130.32f, 224.44f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f18_shapes[] = {
-    { SHAPE_ELLIPSE, 102.41f, 107.75f, 108.87f, 216.97f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 252.34f, 89.94f, 103.53f, 238.69f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 85.12f, 100.85f, 145.96f, 238.46f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 261.58f, 95.42f, 135.35f, 243.35f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f19_shapes[] = {
-    { SHAPE_ELLIPSE, 98.17f, 104.10f, 112.26f, 223.54f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 252.93f, 86.42f, 106.33f, 244.03f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 77.53f, 93.37f, 153.12f, 255.34f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 262.54f, 86.13f, 140.37f, 262.26f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_shape_t my_anim_f20_shapes[] = {
-    { SHAPE_ELLIPSE, 93.94f, 100.46f, 115.65f, 230.12f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 253.52f, 82.91f, 109.13f, 249.36f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-};
-
-static const anim_shape_t my_anim_f21_shapes[] = {
-    { SHAPE_ELLIPSE, 89.71f, 96.81f, 119.03f, 236.70f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 254.10f, 79.39f, 111.93f, 254.70f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-};
-
-static const anim_shape_t my_anim_f22_shapes[] = {
-    { SHAPE_ELLIPSE, 85.48f, 93.17f, 122.42f, 243.27f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 254.69f, 75.88f, 114.73f, 260.04f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-};
-
-static const anim_shape_t my_anim_f23_shapes[] = {
-    { SHAPE_ELLIPSE, 81.25f, 89.52f, 125.80f, 249.85f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 255.27f, 72.36f, 117.53f, 265.38f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-};
-
-static const anim_shape_t my_anim_f24_shapes[] = {
-    { SHAPE_ELLIPSE, 77.02f, 85.88f, 129.19f, 256.42f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
-    { SHAPE_ELLIPSE, 255.86f, 68.84f, 120.33f, 270.72f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f },
+    { SHAPE_ELLIPSE, 69.94f, 85.89f, 160.28f, 272.22f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
+    { SHAPE_ELLIPSE, 263.50f, 76.83f, 145.39f, 281.17f, 0.00f, 0x00ffff, 1.00f, 0.00f, 0.00f, NULL, 0 },
 };
 
 static const anim_vector_frame_t my_anim_frames[] = {
-    { my_anim_f0_shapes, 2, 41 },
-    { my_anim_f1_shapes, 2, 41 },
-    { my_anim_f2_shapes, 2, 41 },
-    { my_anim_f3_shapes, 2, 41 },
-    { my_anim_f4_shapes, 2, 41 },
-    { my_anim_f5_shapes, 2, 41 },
-    { my_anim_f6_shapes, 2, 41 },
-    { my_anim_f7_shapes, 2, 41 },
-    { my_anim_f8_shapes, 2, 41 },
-    { my_anim_f9_shapes, 2, 41 },
-    { my_anim_f10_shapes, 2, 41 },
-    { my_anim_f11_shapes, 2, 41 },
-    { my_anim_f12_shapes, 2, 41 },
-    { my_anim_f13_shapes, 2, 41 },
-    { my_anim_f14_shapes, 2, 41 },
-    { my_anim_f15_shapes, 2, 41 },
-    { my_anim_f16_shapes, 2, 41 },
-    { my_anim_f17_shapes, 2, 41 },
-    { my_anim_f18_shapes, 2, 41 },
-    { my_anim_f19_shapes, 2, 41 },
-    { my_anim_f20_shapes, 2, 41 },
-    { my_anim_f21_shapes, 2, 41 },
-    { my_anim_f22_shapes, 2, 41 },
-    { my_anim_f23_shapes, 2, 41 },
-    { my_anim_f24_shapes, 2, 41 },
+    { my_anim_f0_shapes, 2, 83 },
+    { my_anim_f1_shapes, 2, 83 },
+    { my_anim_f2_shapes, 2, 83 },
+    { my_anim_f3_shapes, 2, 83 },
+    { my_anim_f4_shapes, 2, 83 },
+    { my_anim_f5_shapes, 2, 83 },
+    { my_anim_f6_shapes, 2, 83 },
+    { my_anim_f7_shapes, 2, 83 },
+    { my_anim_f8_shapes, 2, 83 },
+    { my_anim_f9_shapes, 2, 83 },
+    { my_anim_f10_shapes, 2, 83 },
+    { my_anim_f11_shapes, 2, 83 },
+    { my_anim_f12_shapes, 2, 83 },
+    { my_anim_f13_shapes, 2, 83 },
+    { my_anim_f14_shapes, 2, 83 },
+    { my_anim_f15_shapes, 2, 83 },
+    { my_anim_f16_shapes, 2, 83 },
+    { my_anim_f17_shapes, 2, 83 },
+    { my_anim_f18_shapes, 2, 83 },
+    { my_anim_f19_shapes, 2, 83 },
+    { my_anim_f20_shapes, 2, 83 },
 };
 
 const anim_vector_t my_anim_data = {
     .name = "my_anim",
     .frames = my_anim_frames,
-    .frame_count = 25
+    .frame_count = 21
 };

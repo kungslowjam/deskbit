@@ -648,19 +648,79 @@ function getCoordsFromEvent(e) {
     return { x, y };
 }
 
+// History State Management
+function serializeFrame(frame) {
+    return JSON.stringify({
+        pixels: frame.pixels,
+        shapes: frame.shapes,
+        duration: frame.duration
+    });
+}
+
+function restoreFrame(frame, jsonState) {
+    const data = JSON.parse(jsonState);
+    frame.pixels = data.pixels;
+    frame.duration = data.duration;
+
+    // Re-instantiate Shapes to keep methods prototype
+    frame.shapes = data.shapes.map(s => {
+        let shape;
+        if (s.type === 'text') {
+            shape = new TextShape(s.x, s.y, s.text, s.fontSize, s.color);
+        } else {
+            shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
+        }
+
+        // Restore props
+        shape.id = s.id;
+        shape.rotation = s.rotation || 0;
+        shape.opacity = s.opacity !== undefined ? s.opacity : 1;
+        shape.blendMode = s.blendMode || 'source-over';
+        if (s.lineEnd) shape.lineEnd = s.lineEnd;
+
+        return shape;
+    });
+}
+
 function saveUndo() {
     const frame = frames[currentFrameIndex];
     if (!frame) return;
-    undoStack.push([...frame.pixels]);
-    if (undoStack.length > 20) undoStack.shift();
+
+    // Clear redo stack on new action
+    redoStack = [];
+
+    // Push current state state
+    undoStack.push(serializeFrame(frame));
+
+    // Limit stack size
+    if (undoStack.length > 50) undoStack.shift();
+
+    updateLayerUI(); // Sync UI
 }
 
 function undo() {
     if (undoStack.length === 0) return;
+
     const frame = frames[currentFrameIndex];
     if (!frame) return;
-    frame.pixels = undoStack.pop();
+
+    // Save current state to Redo Stack before reverting
+    redoStack.push(serializeFrame(frame));
+
+    // Pop and Restore
+    const previousState = undoStack.pop();
+    restoreFrame(frame, previousState);
+
     renderEditor();
+    renderTimeline(); // Update duration display if changed
+    updateLayerUI();
+}
+
+function updateLayerUI() {
+    // Wrapper to safely call updateLayersPanel if it exists
+    if (typeof updateLayersPanel === 'function') {
+        updateLayersPanel();
+    }
 }
 
 function paint(x, y) {
@@ -1368,7 +1428,29 @@ function startPlay() {
         if (!isPlaying) return;
 
         const elapsed = now - playStartTime + playStartOffset;
-        let currentTime = elapsed % totalDuration; // Loop
+        const loopMode = document.getElementById('loop-mode')?.value || 'infinite';
+
+        // Loop Logic
+        let currentTime = 0;
+
+        if (loopMode === 'once') {
+            if (elapsed >= totalDuration) {
+                stopPlay();
+                return;
+            }
+            currentTime = elapsed;
+        } else if (loopMode === 'pingpong') {
+            const cycle = 2 * totalDuration;
+            const phase = elapsed % cycle;
+            if (phase < totalDuration) {
+                currentTime = phase; // Forward
+            } else {
+                currentTime = (2 * totalDuration) - phase; // Backward
+            }
+        } else {
+            // Infinite or multipliers (basic loop)
+            currentTime = elapsed % totalDuration;
+        }
 
         // Find which frame we are in
         let timeAccum = 0;
@@ -1398,12 +1480,16 @@ function startPlay() {
             }
         }
 
-        // 2. Render Preview (With Interpolation)
+        // 2. Render Preview (With Interpolation & Easing)
         const frame = frames[currentFrameIndex];
         const nextFrameIndex = (currentFrameIndex + 1) % frames.length;
         const nextFrame = frames[nextFrameIndex];
         const frameDur = parseInt(frame.duration || 100);
-        const t = Math.min(1, Math.max(0, localTime / frameDur)); // 0.0 to 1.0 progress
+        let t = Math.min(1, Math.max(0, localTime / frameDur)); // 0.0 to 1.0 progress
+
+        // Apply Easing
+        const easingMode = document.getElementById('easing-mode')?.value || 'linear';
+        t = applyEasing(t, easingMode);
 
         renderPreview(currentFrameIndex, {
             nextFrame: nextFrame,
@@ -1450,7 +1536,24 @@ function updatePlayheadPosition() {
     playhead.style.left = `${pixels}px`;
 }
 
-// Helper for Linear Interpolation
+// Helper for Easing Functions
+function applyEasing(t, type) {
+    switch (type) {
+        case 'ease-in': return t * t;
+        case 'ease-out': return t * (2 - t);
+        case 'ease-in-out': return t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        case 'overshoot': return 2.70158 * t * t * t - 1.70158 * t * t;
+        case 'bounce':
+            if (t < (1 / 2.75)) return 7.5625 * t * t;
+            else if (t < (2 / 2.75)) return 7.5625 * (t -= (1.5 / 2.75)) * t + 0.75;
+            else if (t < (2.5 / 2.75)) return 7.5625 * (t -= (2.25 / 2.75)) * t + 0.9375;
+            else return 7.5625 * (t -= (2.625 / 2.75)) * t + 0.984375;
+        case 'spring':
+            return 1 - Math.pow(Math.E, -5 * t) * Math.cos(10 * t);
+        default: return t; // Linear
+    }
+}
+
 // Helper for Linear Interpolation
 function lerp(start, end, t) {
     if (start === undefined || end === undefined || isNaN(start) || isNaN(end)) {
@@ -2363,35 +2466,24 @@ function renderPreview(frameIndex, interpolation = null) {
 // Redo Stack
 let redoStack = [];
 
+// Redo Stack (Already initialized above)
+
 function redo() {
     if (redoStack.length === 0) return;
-    const state = redoStack.pop();
-    undoStack.push(JSON.stringify(frames[currentFrameIndex]));
-    frames[currentFrameIndex] = JSON.parse(state);
-    // Restore shapes with proper class
-    // Restore shapes with proper class
-    frames[currentFrameIndex].shapes = frames[currentFrameIndex].shapes.map(s => {
-        let shape;
-        if (s.type === 'text') {
-            shape = new TextShape(s.x, s.y, s.text, s.fontSize, s.color);
-        } else {
-            shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
-        }
 
-        shape.rotation = s.rotation || 0;
-        shape.opacity = s.opacity !== undefined ? s.opacity : 1;
-        shape.blendMode = s.blendMode || 'source-over';
-        shape.id = s.id || Date.now() + Math.random(); // Preserve ID if possible
+    const frame = frames[currentFrameIndex];
+    if (!frame) return;
 
-        if (s.lineEnd) shape.lineEnd = s.lineEnd;
-        if (s.type === 'text' && s.text) shape.text = s.text;
-        if (s.type === 'text' && s.fontSize) shape.fontSize = s.fontSize;
+    // Save current state to Undo Stack
+    undoStack.push(serializeFrame(frame));
 
-        return shape;
-    });
+    // Restore from Redo Stack
+    const nextState = redoStack.pop();
+    restoreFrame(frame, nextState);
 
     renderEditor();
-    renderPreview();
+    renderTimeline();
+    updateLayerUI();
 }
 
 function duplicateShape() {
