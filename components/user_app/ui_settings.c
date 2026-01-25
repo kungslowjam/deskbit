@@ -1,9 +1,19 @@
 #include "ui_settings.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#ifndef LV_USE_GIF
+#define LV_USE_GIF 1
+#endif
 #include "src/extra/libs/gif/lv_gif.h"
 #include "ui_robo_eyes.h"
 #include <stdio.h>
+
+// Explicit prototypes to fix compiler warnings/errors
+lv_obj_t *lv_gif_create(lv_obj_t *parent);
+void lv_gif_set_src(lv_obj_t *obj, const void *src);
+
+// Global font declaration for build consistency
+LV_FONT_DECLARE(lv_font_montserrat_48);
 
 // -----------------------------------------------------------------------------
 // Variables

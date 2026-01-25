@@ -111,6 +111,13 @@ const char *anim_manager_get_current(void);
 void anim_manager_update(void);
 
 /**
+ * @brief Load a binary animation (.rbat) from file
+ * @param path File path
+ * @return true if loaded and registered
+ */
+bool anim_manager_load_rbat(const char *path);
+
+/**
  * @brief Set callback when animation finishes
  * @param callback Function to call when animation ends
  */

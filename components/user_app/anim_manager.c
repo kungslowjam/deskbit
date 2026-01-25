@@ -9,52 +9,141 @@
 #include <stdio.h>
 #include <string.h>
 // Helper: Draw filled ellipse - per-pixel check (guaranteed no dropout)
-static void draw_ellipse_filled(lv_color_t *buf, int canvas_w, int canvas_h,
-                                float x, float y, float w, float h,
-                                lv_color_t color, uint8_t opa) {
+// --- Advanced SDF Rendering Engine (Sub-pixel AA) ---
+
+// Blend two colors with alpha (0-255)
+static inline lv_color_t blend_color(lv_color_t bg, lv_color_t fg,
+                                     uint8_t alpha) {
+  if (alpha >= 255)
+    return fg;
+  if (alpha == 0)
+    return bg;
+
+  uint32_t val_r = ((uint32_t)LV_COLOR_GET_R(fg) * alpha +
+                    (uint32_t)LV_COLOR_GET_R(bg) * (255 - alpha)) >>
+                   8;
+  uint32_t val_g = ((uint32_t)LV_COLOR_GET_G(fg) * alpha +
+                    (uint32_t)LV_COLOR_GET_G(bg) * (255 - alpha)) >>
+                   8;
+  uint32_t val_b = ((uint32_t)LV_COLOR_GET_B(fg) * alpha +
+                    (uint32_t)LV_COLOR_GET_B(bg) * (255 - alpha)) >>
+                   8;
+
+  lv_color_t res = LV_COLOR_MAKE(val_r, val_g, val_b);
+  return res;
+}
+
+// SDF for Rounded Rectangle
+static float sd_rect(float px, float py, float cx, float cy, float hw,
+                     float hh) {
+  float dx = fabsf(px - cx) - hw;
+  float dy = fabsf(py - cy) - hh;
+  float max_d = fmaxf(dx, dy);
+  return max_d;
+}
+
+// SDF for Ellipse (Approximate)
+static float sd_ellipse(float px, float py, float cx, float cy, float rx,
+                        float ry) {
+  if (rx < 0.1f || ry < 0.1f)
+    return 1e10;
+  float k0 = sqrtf((px - cx) * (px - cx) / (rx * rx) +
+                   (py - cy) * (py - cy) / (ry * ry));
+  return (k0 - 1.0f) * fminf(rx, ry);
+}
+
+// SDF for Line Segment
+static float sd_line(float px, float py, float x1, float y1, float x2,
+                     float y2) {
+  float dx = x2 - x1;
+  float dy = y2 - y1;
+  float l2 = dx * dx + dy * dy;
+  if (l2 < 0.1f)
+    return sqrtf((px - x1) * (px - x1) + (py - y1) * (py - y1));
+  float t = fmaxf(0, fminf(1, ((px - x1) * dx + (py - y1) * dy) / l2));
+  float proj_x = x1 + t * dx;
+  float proj_y = y1 + t * dy;
+  return sqrtf((px - proj_x) * (px - proj_x) + (py - proj_y) * (py - proj_y));
+}
+
+static void draw_shape_sdf(lv_color_t *buf, int canvas_w, int canvas_h,
+                           uint8_t type, float x, float y, float w, float h,
+                           float rot, float x2, float y2, lv_color_t color,
+                           uint8_t opa) {
+  // Bounding box for optimization
   float cx = x + w / 2.0f;
   float cy = y + h / 2.0f;
-  float rx = w / 2.0f;
-  float ry = h / 2.0f;
+  float max_dim = sqrtf(w * w + h * h);
 
-  if (rx < 1 || ry < 1)
-    return;
+  // If line, bounding box is different
+  int x1_bound, y1_bound, x2_bound, y2_bound;
+  if (type == 2) { // SHAPE_LINE
+    x1_bound = (int)fminf(x, x2) - 2;
+    y1_bound = (int)fminf(y, y2) - 2;
+    x2_bound = (int)fmaxf(x, x2) + 2;
+    y2_bound = (int)fmaxf(y, y2) + 2;
+  } else {
+    x1_bound = (int)(cx - max_dim / 2.0f) - 2;
+    y1_bound = (int)(cy - max_dim / 2.0f) - 2;
+    x2_bound = (int)(cx + max_dim / 2.0f) + 2;
+    y2_bound = (int)(cy + max_dim / 2.0f) + 2;
+  }
 
-  // Bounding box with 1 pixel padding
-  int x1 = (int)floorf(x) - 1;
-  int y1 = (int)floorf(y) - 1;
-  int x2 = (int)ceilf(x + w) + 1;
-  int y2 = (int)ceilf(y + h) + 1;
+  // Clip to canvas
+  if (x1_bound < 0)
+    x1_bound = 0;
+  if (y1_bound < 0)
+    y1_bound = 0;
+  if (x2_bound >= canvas_w)
+    x2_bound = canvas_w - 1;
+  if (y2_bound >= canvas_h)
+    y2_bound = canvas_h - 1;
 
-  if (x1 < 0)
-    x1 = 0;
-  if (y1 < 0)
-    y1 = 0;
-  if (x2 >= canvas_w)
-    x2 = canvas_w - 1;
-  if (y2 >= canvas_h)
-    y2 = canvas_h - 1;
+  float hw = w / 2.0f;
+  float hh = h / 2.0f;
 
-  float rx2 = rx * rx;
-  float ry2 = ry * ry;
+  // Anti-aliasing smoothness
+  const float smoothness = 0.8f;
 
-  // Check every pixel in bounding box
-  for (int py = y1; py <= y2; py++) {
-    float dy = (float)py + 0.5f - cy; // Use pixel center
-    float dy2_norm = (dy * dy) / ry2;
-
-    if (dy2_norm > 1.0f)
-      continue; // Skip entire row if outside
-
+  for (int py = y1_bound; py <= y2_bound; py++) {
     int row_start = py * canvas_w;
+    float fy = (float)py + 0.5f;
+    for (int px = x1_bound; px <= x2_bound; px++) {
+      float fx = (float)px + 0.5f;
+      float d = 1e10;
 
-    for (int px = x1; px <= x2; px++) {
-      float dx = (float)px + 0.5f - cx; // Use pixel center
-      float dx2_norm = (dx * dx) / rx2;
+      if (type == 0) { // SHAPE_RECT
+        // Handle rotation if not zero
+        if (rot != 0) {
+          float rad = rot * M_PI / 180.0f;
+          float cos_a = cosf(rad);
+          float sin_a = sinf(rad);
+          float dx = fx - cx;
+          float dy = fy - cy;
+          float rx = dx * cos_a + dy * sin_a;
+          float ry = -dx * sin_a + dy * cos_a;
+          d = sd_rect(rx, ry, 0, 0, hw, hh);
+        } else {
+          d = sd_rect(fx, fy, cx, cy, hw, hh);
+        }
+      } else if (type == 1) { // SHAPE_ELLIPSE
+        d = sd_ellipse(fx, fy, cx, cy, hw, hh);
+      } else if (type == 2) {                     // SHAPE_LINE
+        d = sd_line(fx, fy, x, y, x2, y2) - 1.0f; // 1px half-width
+      }
 
-      // Check if pixel center is inside ellipse
-      if (dx2_norm + dy2_norm <= 1.0f) {
-        buf[row_start + px] = color;
+      if (d < smoothness) {
+        float alpha_f = 0.5f - d / (2.0f * smoothness);
+        if (alpha_f > 1.0f)
+          alpha_f = 1.0f;
+        if (alpha_f < 0.0f)
+          alpha_f = 0.0f;
+
+        uint16_t total_alpha = (uint16_t)(alpha_f * opa);
+        if (total_alpha > 0) {
+          buf[row_start + px] =
+              blend_color(buf[row_start + px], color, (uint8_t)total_alpha);
+        }
       }
     }
   }
@@ -163,6 +252,89 @@ bool anim_manager_register_vector(const anim_vector_t *vector) {
   printf("[AnimMgr] Registered Vector '%s' (%d frames)\n", vector->name,
          vector->frame_count);
   return true;
+}
+
+// Binary Loader for .rbat files
+bool anim_manager_load_rbat(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (!f)
+    return false;
+
+  char magic[4];
+  fread(magic, 1, 4, f);
+  if (memcmp(magic, "RBAT", 4) != 0) {
+    fclose(f);
+    return false;
+  }
+
+  uint16_t version, width, height, frame_count;
+  uint32_t reserved;
+  fread(&version, 2, 1, f);
+  fread(&width, 2, 1, f);
+  fread(&height, 2, 1, f);
+  fread(&frame_count, 2, 1, f);
+  fread(&reserved, 4, 1, f);
+
+  // Allocate anim_vector_t and cast away const to fill data
+  anim_vector_t *vector = (anim_vector_t *)malloc(sizeof(anim_vector_t));
+  ((char **)&vector->name)[0] = strdup(path);
+  vector->frame_count = frame_count;
+  // Use a non-const pointer to fill the data
+  anim_vector_frame_t *write_frames =
+      (anim_vector_frame_t *)malloc(sizeof(anim_vector_frame_t) * frame_count);
+  ((anim_vector_frame_t **)&vector->frames)[0] = write_frames;
+
+  for (uint16_t i = 0; i < frame_count; i++) {
+    uint16_t duration, shape_count;
+    fread(&duration, 2, 1, f);
+    fread(&shape_count, 2, 1, f);
+
+    write_frames[i].duration_ms = duration;
+    write_frames[i].shape_count = shape_count;
+
+    // Use non-const pointer to fill the shapes data
+    anim_shape_t *write_shapes =
+        (anim_shape_t *)malloc(sizeof(anim_shape_t) * shape_count);
+    ((anim_shape_t **)&write_frames[i].shapes)[0] = write_shapes;
+
+    for (uint16_t j = 0; j < shape_count; j++) {
+      anim_shape_t *s = &write_shapes[j];
+      uint8_t type;
+      fread(&type, 1, 1, f);
+      s->type = type;
+      fread(&s->x, 4, 1, f);
+      fread(&s->y, 4, 1, f);
+      fread(&s->w, 4, 1, f);
+      fread(&s->h, 4, 1, f);
+      fread(&s->rotation, 4, 1, f);
+      fread(&s->opacity, 4, 1, f);
+
+      uint32_t color_hex;
+      fread(&color_hex, 4, 1, f); // 0xRRGGBB
+      s->color = color_hex;
+
+      fread(&s->x2, 4, 1, f);
+      fread(&s->y2, 4, 1, f);
+
+      uint8_t font_size;
+      uint16_t text_len;
+      fread(&font_size, 1, 1, f);
+      fread(&text_len, 2, 1, f);
+      s->font_size = font_size;
+
+      if (text_len > 0) {
+        char *text = (char *)malloc(text_len + 1);
+        fread(text, 1, text_len, f);
+        text[text_len] = '\0';
+        s->text = text;
+      } else {
+        s->text = NULL;
+      }
+    }
+  }
+
+  fclose(f);
+  return anim_manager_register_vector(vector);
 }
 
 bool anim_manager_play(const char *name, uint16_t loop) {
@@ -353,45 +525,17 @@ void anim_manager_update(void) {
       lv_color_t color = lv_color_hex(s1->color);
       uint8_t opa = (uint8_t)(opa_f * 255);
 
-      if (s1->type == SHAPE_ELLIPSE) {
-        draw_ellipse_filled(back_buffer, 466, 466, x, y, w, h, color, opa);
-      } else if (s1->type == SHAPE_RECT) {
-        // Draw rect to back_buffer directly
-        int rx1 = (int)x, ry1 = (int)y;
-        int rx2 = (int)(x + w), ry2 = (int)(y + h);
-        if (rx1 < 0)
-          rx1 = 0;
-        if (ry1 < 0)
-          ry1 = 0;
-        if (rx2 >= 466)
-          rx2 = 465;
-        if (ry2 >= 466)
-          ry2 = 465;
-        for (int py = ry1; py <= ry2; py++) {
-          for (int px = rx1; px <= rx2; px++) {
-            back_buffer[py * 466 + px] = color;
-          }
-        }
-      } else if (s1->type == SHAPE_LINE) {
-        float x2 = s1->x2 + (s2->x2 - s1->x2) * t;
-        float y2 = s1->y2 + (s2->y2 - s1->y2) * t;
-
-        lv_draw_line_dsc_t dsc;
-        lv_draw_line_dsc_init(&dsc);
-        dsc.color = color;
-        dsc.opa = opa;
-        dsc.width = 2;
-        lv_point_t points[2] = {{(lv_coord_t)x, (lv_coord_t)y},
-                                {(lv_coord_t)x2, (lv_coord_t)y2}};
-        lv_canvas_draw_line(vector_canvas, points, 2, &dsc);
+      if (s1->type == SHAPE_RECT || s1->type == SHAPE_ELLIPSE ||
+          s1->type == SHAPE_LINE) {
+        draw_shape_sdf(back_buffer, 466, 466, s1->type, x, y, w, h,
+                       s1->rotation, s1->x2 + (s2->x2 - s1->x2) * t,
+                       s1->y2 + (s2->y2 - s1->y2) * t, color, opa);
       } else if (s1->type == SHAPE_TEXT && s1->text != NULL) {
         // Text rendering via lv_canvas_draw_text
         lv_draw_label_dsc_t label_dsc;
         lv_draw_label_dsc_init(&label_dsc);
         label_dsc.color = color;
         label_dsc.opa = opa;
-
-        // Use default font (enable more in lv_conf.h if needed)
         label_dsc.font = &lv_font_montserrat_14;
 
         lv_canvas_draw_text(vector_canvas, (lv_coord_t)x, (lv_coord_t)y,

@@ -20,8 +20,16 @@ def rgb565_convert(r, g, b):
 
 def hex_to_rgb(hex_color):
     """Convert #RRGGBB to (r, g, b)"""
+    if not hex_color: return (255, 255, 255)
     hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    try:
+        if len(hex_color) == 6:
+            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        elif len(hex_color) == 3:
+            return tuple(int(hex_color[i]*2, 16) for i in (0, 1, 2))
+    except Exception:
+        pass
+    return (255, 255, 255)
 
 def blend_colors(bg_rgb, fg_rgb, opacity):
     """Blend foreground color onto background with opacity"""
@@ -503,6 +511,61 @@ def update_registry(anim_name, registry_file, width):
     with open(registry_file, 'w', encoding='utf-8') as f:
         f.write(content)
 
+def export_rbat(json_data, output_path):
+    """Export animation data to binary .rbat format"""
+    import struct
+    
+    width = json_data.get('width', 466)
+    height = json_data.get('height', 466)
+    frames = json_data.get('frames', [])
+    
+    # Header: Magic(4), Version(2), Width(2), Height(2), FrameCount(2), Reserved(4) = 16 bytes
+    header = struct.pack('<4sHHHH L', b'RBAT', 1, width, height, len(frames), 0)
+    
+    with open(output_path, 'wb') as f:
+        f.write(header)
+        
+        for frame in frames:
+            duration = int(frame.get('duration', 100))
+            shapes = frame.get('shapes', [])
+            
+            # Frame: Duration(2), ShapeCount(2)
+            f.write(struct.pack('<HH', duration, len(shapes)))
+            
+            for s in shapes:
+                stype = 0 # Rect
+                if s.get('type') == 'ellipse': stype = 1
+                elif s.get('type') == 'line': stype = 2
+                elif s.get('type') == 'text': stype = 3
+                
+                x = float(s.get('x', 0))
+                y = float(s.get('y', 0))
+                w = float(s.get('width', 0))
+                h = float(s.get('height', 0))
+                rot = float(s.get('rotation', 0))
+                opacity = float(s.get('opacity', 1.0))
+                
+                rgb = hex_to_rgb(s.get('color', '#FFFFFF'))
+                color = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]
+                
+                le = s.get('lineEnd', {})
+                x2 = float(le.get('x', 0))
+                y2 = float(le.get('y', 0))
+                
+                font_size = int(s.get('fontSize', 14))
+                text = s.get('text', '')
+                text_bytes = text.encode('utf-8')
+                text_len = len(text_bytes)
+                
+                # Shape: Type(1), x(f), y(f), w(f), h(f), rot(f), opa(f), color(I), x2(f), y2(f), fs(B), tlen(H) = 43 bytes + text
+                shape_data = struct.pack('<B ffffff I ff B H', 
+                    stype, x, y, w, h, rot, opacity, color, x2, y2, font_size, text_len)
+                f.write(shape_data)
+                if text_len > 0:
+                    f.write(text_bytes)
+    
+    print(f"✅ Generated Binary: {output_path} (RBAT Format)")
+
 def update_cmake(anim_name, cmake_file):
     """Update CMakeLists.txt to include new animation"""
     if not cmake_file.exists():
@@ -558,7 +621,11 @@ def main():
         generate_h_file(anim_name, anim_dir)
         update_cmake(anim_name, user_app_dir / "CMakeLists.txt")
         update_registry(anim_name, user_app_dir / "anim_registry.c", json_data.get('width', 466))
-        print(f"\n🎉 Vector Export Complete!")
+        
+        # Also export binary version
+        export_rbat(json_data, anim_dir / f"{anim_name}.rbat")
+        
+        print(f"\n🎉 Export Complete (C + Binary)!")
 
 if __name__ == "__main__":
     main()
