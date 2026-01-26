@@ -1,0 +1,235 @@
+(() => {
+    const SUPPORTED_SHAPES = new Set(['rect', 'ellipse', 'line', 'text']);
+
+    function sanitizeName(name) {
+        const cleaned = (name || 'anim').toString().replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+        return cleaned || 'anim';
+    }
+
+    function hexToLvglColor(hex) {
+        if (!hex) return 'lv_color_hex(0xFFFFFF)';
+        const clean = hex.toString().replace('#', '').trim();
+        const value = clean.length === 3
+            ? clean.split('').map(c => c + c).join('')
+            : clean.padEnd(6, 'f');
+        return `lv_color_hex(0x${value.toUpperCase()})`;
+    }
+
+    function frameHasPixels(frame) {
+        if (!frame || !Array.isArray(frame.pixels)) return false;
+        for (let i = 0; i < frame.pixels.length; i++) {
+            if (frame.pixels[i]) return true;
+        }
+        return false;
+    }
+
+    function buildTimeline(frames) {
+        const timeline = [];
+        let current = 0;
+        frames.forEach(frame => {
+            const duration = Math.max(1, parseInt(frame.duration || 100, 10));
+            timeline.push({ start: current, duration });
+            current += duration;
+        });
+        return { timeline, total: current };
+    }
+
+    function pathCbFor(mode) {
+        switch (mode) {
+            case 'ease-in':
+                return 'lv_anim_path_ease_in';
+            case 'ease-out':
+                return 'lv_anim_path_ease_out';
+            case 'ease-in-out':
+                return 'lv_anim_path_ease_in_out';
+            default:
+                return 'lv_anim_path_linear';
+        }
+    }
+
+    function collectIssues(animation) {
+        const issues = [];
+        const frames = animation.frames || [];
+
+        if (frames.some(frameHasPixels)) {
+            issues.push('Pixel layers detected. LVGL native export only supports vector shapes.');
+        }
+
+        frames.forEach((frame, idx) => {
+            (frame.shapes || []).forEach(shape => {
+                if (!shape) return;
+                if (!SUPPORTED_SHAPES.has(shape.type)) {
+                    issues.push(`Unsupported shape type "${shape.type}" on frame ${idx + 1}.`);
+                }
+                if (shape.rotation && Math.abs(shape.rotation) > 0.01) {
+                    issues.push(`Rotation detected on a ${shape.type} (frame ${idx + 1}). Rotation is ignored in LVGL export.`);
+                }
+                if (shape.blendMode && shape.blendMode !== 'source-over') {
+                    issues.push(`Blend mode "${shape.blendMode}" on frame ${idx + 1} is not supported in LVGL export.`);
+                }
+            });
+        });
+
+        return issues;
+    }
+
+    function generate(animation) {
+        const name = sanitizeName(animation.name || 'anim');
+        const frames = animation.frames || [];
+        const easingMode = animation.easingMode || 'linear';
+        const { timeline, total } = buildTimeline(frames);
+        const warnings = collectIssues(animation);
+
+        const shapeEntries = [];
+        const shapeMap = new Map();
+
+        frames.forEach((frame, frameIndex) => {
+            (frame.shapes || []).forEach((shape, shapeIndex) => {
+                if (!shape) return;
+                const id = shape.id !== undefined && shape.id !== null
+                    ? String(shape.id)
+                    : `f${frameIndex}_s${shapeIndex}`;
+
+                if (!shapeMap.has(id)) {
+                    const entry = { id, index: shapeEntries.length, keyframes: [] };
+                    shapeMap.set(id, entry);
+                    shapeEntries.push(entry);
+                }
+                shapeMap.get(id).keyframes.push({
+                    frameIndex,
+                    time: timeline[frameIndex]?.start || 0,
+                    duration: timeline[frameIndex]?.duration || 100,
+                    shape
+                });
+            });
+        });
+
+        shapeEntries.forEach(entry => {
+            entry.keyframes.sort((a, b) => a.frameIndex - b.frameIndex);
+        });
+
+        const pathCb = pathCbFor(easingMode);
+        const repeatDelayTotal = Math.max(0, total);
+
+        let c = '';
+        c += `/**\n * @file ${name}.c\n * @brief Auto-generated LVGL native animation\n */\n\n`;
+        c += `#if defined(LV_LVGL_H_INCLUDE_SIMPLE)\n#include "lvgl.h"\n#else\n#include "lvgl/lvgl.h"\n#endif\n\n`;
+        c += `typedef struct {\n    lv_obj_t * obj;\n    lv_point_t points[2];\n} line_ctx_t;\n\n`;
+        c += `static void anim_x_cb(void * var, int32_t v) { lv_obj_set_x(var, v); }\n`;
+        c += `static void anim_y_cb(void * var, int32_t v) { lv_obj_set_y(var, v); }\n`;
+        c += `static void anim_w_cb(void * var, int32_t v) { lv_obj_set_width(var, v); }\n`;
+        c += `static void anim_h_cb(void * var, int32_t v) { lv_obj_set_height(var, v); }\n`;
+        c += `static void anim_opa_cb(void * var, int32_t v) { lv_obj_set_style_opa(var, (lv_opa_t)v, LV_PART_MAIN); }\n`;
+        c += `static void anim_line_x1_cb(void * var, int32_t v) { line_ctx_t * ctx = (line_ctx_t *)var; ctx->points[0].x = v; lv_line_set_points(ctx->obj, ctx->points, 2); }\n`;
+        c += `static void anim_line_y1_cb(void * var, int32_t v) { line_ctx_t * ctx = (line_ctx_t *)var; ctx->points[0].y = v; lv_line_set_points(ctx->obj, ctx->points, 2); }\n`;
+        c += `static void anim_line_x2_cb(void * var, int32_t v) { line_ctx_t * ctx = (line_ctx_t *)var; ctx->points[1].x = v; lv_line_set_points(ctx->obj, ctx->points, 2); }\n`;
+        c += `static void anim_line_y2_cb(void * var, int32_t v) { line_ctx_t * ctx = (line_ctx_t *)var; ctx->points[1].y = v; lv_line_set_points(ctx->obj, ctx->points, 2); }\n\n`;
+
+        c += `void create_anim_${name}(lv_obj_t * parent) {\n`;
+        c += `    lv_anim_t a;\n`;
+
+        shapeEntries.forEach(entry => {
+            const base = entry.keyframes[0]?.shape;
+            if (!base || !SUPPORTED_SHAPES.has(base.type)) return;
+
+            const objName = `shape_${entry.index}`;
+            const color = hexToLvglColor(base.color);
+            const x = Math.round(base.x || 0);
+            const y = Math.round(base.y || 0);
+            const w = Math.max(1, Math.round(base.width || 1));
+            const h = Math.max(1, Math.round(base.height || 1));
+            const opa = Math.round((base.opacity ?? 1) * 255);
+
+            if (base.type === 'rect' || base.type === 'ellipse') {
+                c += `    lv_obj_t * ${objName} = lv_obj_create(parent);\n`;
+                c += `    lv_obj_set_size(${objName}, ${w}, ${h});\n`;
+                c += `    lv_obj_set_pos(${objName}, ${x}, ${y});\n`;
+                c += `    lv_obj_set_style_bg_color(${objName}, ${color}, LV_PART_MAIN);\n`;
+                c += `    lv_obj_set_style_bg_opa(${objName}, LV_OPA_COVER, LV_PART_MAIN);\n`;
+                c += `    lv_obj_set_style_border_width(${objName}, 0, LV_PART_MAIN);\n`;
+                if (base.type === 'ellipse') {
+                    c += `    lv_obj_set_style_radius(${objName}, LV_RADIUS_CIRCLE, LV_PART_MAIN);\n`;
+                } else {
+                    c += `    lv_obj_set_style_radius(${objName}, 0, LV_PART_MAIN);\n`;
+                }
+                c += `    lv_obj_set_style_opa(${objName}, ${opa}, LV_PART_MAIN);\n`;
+            } else if (base.type === 'line') {
+                const lineEnd = base.lineEnd || { x: x + w, y: y + h };
+                const x2 = Math.round(lineEnd.x || 0);
+                const y2 = Math.round(lineEnd.y || 0);
+                c += `    static line_ctx_t ${objName}_ctx;\n`;
+                c += `    ${objName}_ctx.obj = lv_line_create(parent);\n`;
+                c += `    ${objName}_ctx.points[0] = (lv_point_t){ ${x}, ${y} };\n`;
+                c += `    ${objName}_ctx.points[1] = (lv_point_t){ ${x2}, ${y2} };\n`;
+                c += `    lv_line_set_points(${objName}_ctx.obj, ${objName}_ctx.points, 2);\n`;
+                c += `    lv_obj_set_style_line_color(${objName}_ctx.obj, ${color}, LV_PART_MAIN);\n`;
+                c += `    lv_obj_set_style_line_width(${objName}_ctx.obj, 2, LV_PART_MAIN);\n`;
+                c += `    lv_obj_set_style_line_opa(${objName}_ctx.obj, ${opa}, LV_PART_MAIN);\n`;
+            } else if (base.type === 'text') {
+                const text = (base.text || 'Text').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                c += `    lv_obj_t * ${objName} = lv_label_create(parent);\n`;
+                c += `    lv_label_set_text(${objName}, "${text}");\n`;
+                c += `    lv_obj_set_pos(${objName}, ${x}, ${y});\n`;
+                c += `    lv_obj_set_style_text_color(${objName}, ${color}, LV_PART_MAIN);\n`;
+                c += `    lv_obj_set_style_opa(${objName}, ${opa}, LV_PART_MAIN);\n`;
+            }
+
+            entry.keyframes.forEach((kf, idx) => {
+                const next = entry.keyframes[idx + 1];
+                if (!next) return;
+                const duration = Math.max(1, Math.round(kf.duration));
+                const delay = Math.max(0, Math.round(kf.time));
+                const repeatDelay = Math.max(0, repeatDelayTotal - (delay + duration));
+
+                const props = [
+                    { name: 'x', cb: 'anim_x_cb', get: s => s.x, target: objName },
+                    { name: 'y', cb: 'anim_y_cb', get: s => s.y, target: objName },
+                    { name: 'width', cb: 'anim_w_cb', get: s => s.width, target: objName },
+                    { name: 'height', cb: 'anim_h_cb', get: s => s.height, target: objName },
+                    { name: 'opacity', cb: 'anim_opa_cb', get: s => (s.opacity ?? 1) * 255, target: objName }
+                ];
+
+                if (base.type === 'line') {
+                    const ctxName = `${objName}_ctx`;
+                    props.splice(0, props.length, ...[
+                        { name: 'x1', cb: 'anim_line_x1_cb', get: s => s.x, target: `&${ctxName}` },
+                        { name: 'y1', cb: 'anim_line_y1_cb', get: s => s.y, target: `&${ctxName}` },
+                        { name: 'x2', cb: 'anim_line_x2_cb', get: s => s.lineEnd?.x, target: `&${ctxName}` },
+                        { name: 'y2', cb: 'anim_line_y2_cb', get: s => s.lineEnd?.y, target: `&${ctxName}` }
+                    ]);
+                }
+
+                props.forEach(prop => {
+                    const startVal = prop.get(kf.shape);
+                    const endVal = prop.get(next.shape);
+                    if (startVal === undefined || endVal === undefined) return;
+                    const start = Math.round(startVal);
+                    const end = Math.round(endVal);
+                    if (start === end) return;
+                    c += `    lv_anim_init(&a);\n`;
+                    c += `    lv_anim_set_var(&a, ${prop.target});\n`;
+                    c += `    lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)${prop.cb});\n`;
+                    c += `    lv_anim_set_values(&a, ${start}, ${end});\n`;
+                    c += `    lv_anim_set_time(&a, ${duration});\n`;
+                    c += `    lv_anim_set_delay(&a, ${delay});\n`;
+                    c += `    lv_anim_set_path_cb(&a, ${pathCb});\n`;
+                    c += `    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);\n`;
+                    c += `    lv_anim_set_repeat_delay(&a, ${repeatDelay});\n`;
+                    c += `    lv_anim_start(&a);\n`;
+                });
+            });
+        });
+
+        c += `}\n`;
+
+        const h = `#ifndef ${name.toUpperCase()}_H\n#define ${name.toUpperCase()}_H\n\n#if defined(LV_LVGL_H_INCLUDE_SIMPLE)\n#include "lvgl.h"\n#else\n#include "lvgl/lvgl.h"\n#endif\n\nvoid create_anim_${name}(lv_obj_t * parent);\n\n#endif\n`;
+
+        return { cContent: c, hContent: h, warnings };
+    }
+
+    window.LVGLNativeGenerator = {
+        generate,
+        collectIssues,
+        sanitizeName
+    };
+})();

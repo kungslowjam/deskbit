@@ -287,6 +287,8 @@ function init() {
     if (stopBtn) stopBtn.onclick = stopPlay;
     if (exportCBtn) exportCBtn.onclick = exportToC;
     if (exportJsonBtn) exportJsonBtn.onclick = exportToJSON;
+    const exportNativeBtn = document.getElementById('export-lvgl-native-btn');
+    if (exportNativeBtn) exportNativeBtn.onclick = exportToLVGLNative;
 
     // Color Picker - FIXED!
     const colorPicker = document.getElementById('color-picker');
@@ -1013,18 +1015,18 @@ let shapeClipboard = null;
 function getResizeHandle(px, py, shape) {
     if (!shape) return null;
     const bounds = shape.getBounds();
-    const padding = 4;
-    const size = 8;
+    const handleSize = 12; // Increased hit area
+    const half = handleSize / 2;
 
     const handles = {
-        'tl': { x: bounds.x - padding, y: bounds.y - padding },
-        'tr': { x: bounds.x + bounds.width + padding - size, y: bounds.y - padding },
-        'bl': { x: bounds.x - padding, y: bounds.y + bounds.height + padding - size },
-        'br': { x: bounds.x + bounds.width + padding - size, y: bounds.y + bounds.height + padding - size }
+        'tl': { x: bounds.x, y: bounds.y },
+        'tr': { x: bounds.x + bounds.width, y: bounds.y },
+        'bl': { x: bounds.x, y: bounds.y + bounds.height },
+        'br': { x: bounds.x + bounds.width, y: bounds.y + bounds.height }
     };
 
     for (const [key, h] of Object.entries(handles)) {
-        if (px >= h.x && px <= h.x + size && py >= h.y && py <= h.y + size) {
+        if (px >= h.x - half && px <= h.x + half && py >= h.y - half && py <= h.y + half) {
             return key;
         }
     }
@@ -1058,18 +1060,18 @@ function setupEventListeners() {
                 if (handle) {
                     isResizingShape = true;
                     activeHandle = handle;
-                    initialShapeState = { ...selectedShape }; // Clone props
+                    tempStartX = coords.x;
+                    tempStartY = coords.y;
                     saveUndo();
                     return;
                 }
             }
 
-            // 2. Check Shape Hit
+            // 2. Check Shape Hit (Top to Bottom)
             let clickedShape = null;
-            // Check shapes in reverse order (top to bottom)
             for (let i = frame.shapes.length - 1; i >= 0; i--) {
                 const shape = frame.shapes[i];
-                if (shape.containsPoint && shape.containsPoint(coords.x, coords.y)) {
+                if (shape.containsPoint(coords.x, coords.y)) {
                     clickedShape = shape;
                     break;
                 }
@@ -1082,10 +1084,11 @@ function setupEventListeners() {
                 dragOffsetY = coords.y - selectedShape.y;
                 saveUndo();
                 renderEditor();
+                updateLayersPanel();
             } else {
-                // Clicked empty space -> Deselect
                 selectedShape = null;
                 renderEditor();
+                updateLayersPanel();
             }
             return;
         }
@@ -1117,41 +1120,43 @@ function setupEventListeners() {
 
         // Resize Shape
         if (isResizingShape && selectedShape) {
-            const dx = coords.x - tempStartX; // Delta from start click is tricky, better use absolute
-            // Actually better to calculate based on handle role
+            const dx = coords.x - tempStartX;
+            const dy = coords.y - tempStartY;
 
-            // Ideally we need start props + mouse delta
-            // For simplicity, let's just adjust edges based on mouse pos
-
-            if (activeHandle === 'br') {
-                selectedShape.width = Math.max(1, coords.x - selectedShape.x);
-                selectedShape.height = Math.max(1, coords.y - selectedShape.y);
-            } else if (activeHandle === 'bl') {
-                const oldRight = selectedShape.x + selectedShape.width;
-                selectedShape.x = Math.min(coords.x, oldRight - 1);
-                selectedShape.width = oldRight - selectedShape.x;
-                selectedShape.height = Math.max(1, coords.y - selectedShape.y);
-            } else if (activeHandle === 'tr') {
-                const oldBottom = selectedShape.y + selectedShape.height;
-                selectedShape.y = Math.min(coords.y, oldBottom - 1);
-                selectedShape.height = oldBottom - selectedShape.y;
-                selectedShape.width = Math.max(1, coords.x - selectedShape.x);
-            } else if (activeHandle === 'tl') {
-                const oldRight = selectedShape.x + selectedShape.width;
-                const oldBottom = selectedShape.y + selectedShape.height;
-                selectedShape.x = Math.min(coords.x, oldRight - 1);
-                selectedShape.y = Math.min(coords.y, oldBottom - 1);
-                selectedShape.width = oldRight - selectedShape.x;
-                selectedShape.height = oldBottom - selectedShape.y;
-            }
-
-            // For Line Object
-            if (selectedShape.type === 'line') {
-                // Simplistic line resizing (move end point or start point?)
-                // Currently handles logic is bounding-box based. 
-                // For lines, standard handles might feel weird.
-                // Let's stick to bounding box or add specific endpoints logic later.
-                // For now, bounding box resize will stretch the line.
+            if (selectedShape.type === 'line' && selectedShape.lineEnd) {
+                // Direct endpoint manipulation for lines
+                if (activeHandle === 'tl') {
+                    selectedShape.x = coords.x;
+                    selectedShape.y = coords.y;
+                } else if (activeHandle === 'br') {
+                    selectedShape.lineEnd.x = coords.x;
+                    selectedShape.lineEnd.y = coords.y;
+                }
+                // For a line, tr and bl could move start/end too or behave as bounding box
+                // Let's treat tl as start, br as end for now.
+            } else {
+                // Bounding box resize
+                if (activeHandle === 'br') {
+                    selectedShape.width = Math.max(1, coords.x - selectedShape.x);
+                    selectedShape.height = Math.max(1, coords.y - selectedShape.y);
+                } else if (activeHandle === 'bl') {
+                    const oldRight = selectedShape.x + selectedShape.width;
+                    selectedShape.x = Math.min(coords.x, oldRight - 1);
+                    selectedShape.width = oldRight - selectedShape.x;
+                    selectedShape.height = Math.max(1, coords.y - selectedShape.y);
+                } else if (activeHandle === 'tr') {
+                    const oldBottom = selectedShape.y + selectedShape.height;
+                    selectedShape.y = Math.min(coords.y, oldBottom - 1);
+                    selectedShape.height = oldBottom - selectedShape.y;
+                    selectedShape.width = Math.max(1, coords.x - selectedShape.x);
+                } else if (activeHandle === 'tl') {
+                    const oldRight = selectedShape.x + selectedShape.width;
+                    const oldBottom = selectedShape.y + selectedShape.height;
+                    selectedShape.x = Math.min(coords.x, oldRight - 1);
+                    selectedShape.y = Math.min(coords.y, oldBottom - 1);
+                    selectedShape.width = oldRight - selectedShape.x;
+                    selectedShape.height = oldBottom - selectedShape.y;
+                }
             }
 
             renderEditor();
@@ -1980,11 +1985,9 @@ function fitZoom() {
     }
 }
 
-// ======== EXPORT TO C ========
+// ======== EXPORT TO C (BITMAP BAKING) ========
 async function exportToC() {
-    // Get animation name from input field
     let name = document.getElementById('anim-name')?.value || 'my_anim';
-    // Sanitize name (remove special characters, spaces)
     name = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
     if (!name || name.length === 0) name = 'my_anim';
 
@@ -2007,8 +2010,6 @@ async function exportToC() {
 `;
 
     const dscNames = [];
-
-    // Helper Canvas for Baking
     const bakeCanvas = document.createElement('canvas');
     bakeCanvas.width = GRID_WIDTH;
     bakeCanvas.height = GRID_HEIGHT;
@@ -2019,11 +2020,9 @@ async function exportToC() {
         const frameName = `${name}_f${idx}`;
         dscNames.push(frameName);
 
-        // 1. Render Frame to Canvas (Apply all Blending/Opacity)
-        bakeCtx.fillStyle = '#000000'; // Black background
+        bakeCtx.fillStyle = '#000000';
         bakeCtx.fillRect(0, 0, GRID_WIDTH, GRID_HEIGHT);
 
-        // Draw Pixels
         const pImgData = bakeCtx.createImageData(GRID_WIDTH, GRID_HEIGHT);
         const pData = pImgData.data;
         for (let i = 0; i < frame.pixels.length; i++) {
@@ -2033,28 +2032,20 @@ async function exportToC() {
                 const g = parseInt(color.slice(3, 5), 16);
                 const b = parseInt(color.slice(5, 7), 16);
                 const idx = i * 4;
-                pData[idx] = r;
-                pData[idx + 1] = g;
-                pData[idx + 2] = b;
-                pData[idx + 3] = 255;
+                pData[idx] = r; pData[idx + 1] = g; pData[idx + 2] = b; pData[idx + 3] = 255;
             }
         }
         bakeCtx.putImageData(pImgData, 0, 0);
 
-        // Draw Shapes (with context restore/save built-in to draw method)
         if (frame.shapes && frame.shapes.length > 0) {
-            // Ensure Clean State before shapes
             bakeCtx.globalAlpha = 1.0;
             bakeCtx.globalCompositeOperation = 'source-over';
-
             frame.shapes.forEach(shape => shape.draw(bakeCtx));
         }
 
-        // 2. Extract Data
         const finalImgData = bakeCtx.getImageData(0, 0, GRID_WIDTH, GRID_HEIGHT);
         const rgba = finalImgData.data;
 
-        // 3. Convert to C Array (RGB565)
         cContent += `const LV_ATTRIBUTE_MEM_ALIGN uint8_t ${frameName}_map[] = {\n`;
         let line = "    ";
         let byteCount = 0;
@@ -2063,34 +2054,21 @@ async function exportToC() {
             const r = rgba[i];
             const g = rgba[i + 1];
             const b = rgba[i + 2];
-            // Alpha is ignored in RGB565 (unless we use alpha byte, but standard is usually no alpha for basic bitmaps)
-
-            // RGB565 Conversion
             const r5 = (r >> 3) & 0x1F;
             const g6 = (g >> 2) & 0x3F;
             const b5 = (b >> 3) & 0x1F;
-
-            // Little Endian
             const rgb565 = (r5 << 11) | (g6 << 5) | b5;
             const lowByte = rgb565 & 0xFF;
             const highByte = (rgb565 >> 8) & 0xFF;
-
-            // Output bytes (Low, High for Little Endian architecture usually, LVGL depends on config but standard is often creating simple byte array)
-            // Actually LVGL usually expects Little Endian: Low byte, High byte
             line += `0x${lowByte.toString(16).padStart(2, '0')}, 0x${highByte.toString(16).padStart(2, '0')}, `;
             byteCount += 2;
-
             if (byteCount >= 24) {
                 cContent += line + "\n";
                 line = "    ";
                 byteCount = 0;
             }
         }
-
-        if (line.trim() !== "") {
-            cContent += line + "\n";
-        }
-
+        if (line.trim() !== "") cContent += line + "\n";
         cContent += `};\n\n`;
 
         cContent += `const lv_img_dsc_t ${frameName} = {\n`;
@@ -2103,43 +2081,177 @@ async function exportToC() {
         cContent += `};\n\n`;
     }
 
-    // Create array of descriptors
     cContent += `const lv_img_dsc_t* ${name}_frames[] = {\n`;
-    dscNames.forEach(frameName => {
-        cContent += `    &${frameName},\n`;
-    });
+    dscNames.forEach(f => cContent += `    &${f},\n`);
     cContent += `};\n\n`;
     cContent += `const uint8_t ${name}_frame_count = ${frames.length};\n`;
 
-    // Generate H file
-    const hContent = `/**
- * @file ${name}.h
- * @brief Header for ${name}.c
- * Auto-generated from Robot Face Studio
+    const hContent = `#ifndef ${name.toUpperCase()}_H\n#define ${name.toUpperCase()}_H\n#include "lvgl/lvgl.h"\nextern const lv_img_dsc_t* ${name}_frames[];\nextern const uint8_t ${name}_frame_count;\n#endif\n`;
+
+    showToast('Generating Bitmap files...');
+    await saveFile(cContent, `${name}.c`, 'text/x-c');
+    await new Promise(r => setTimeout(r, 500));
+    await saveFile(hContent, `${name}.h`, 'text/x-c');
+    showToast(`✅ Exported ${name}.c (Bitmap)`);
+}
+
+// ======== NATIVE LVGL EXPORT ========
+async function exportToLVGLNative() {
+    let name = document.getElementById('anim-name')?.value || 'my_anim';
+    name = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+
+    let cContent = `/**
+ * @file ${name}_native.c
+ * @brief Auto-generated Native LVGL animation from Robot Face Studio
  */
-
-#ifndef ${name.toUpperCase()}_H
-#define ${name.toUpperCase()}_H
-
 #include "lvgl/lvgl.h"
 
-extern const lv_img_dsc_t* ${name}_frames[];
-extern const uint8_t ${name}_frame_count;
+// Helper to set bg opacity for animations
+static void _lv_obj_set_bg_opa_anim(void * obj, int32_t v) {
+    lv_obj_set_style_bg_opa(obj, v, 0);
+}
 
-#endif // ${name.toUpperCase()}_H
+void create_${name}_native(lv_obj_t * parent) {
+    // 1. Setup Layer Background (Optional)
+    // lv_obj_set_style_bg_color(parent, lv_color_hex(0x000000), 0);
+    // lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+
 `;
 
-    // Save both files
-    showToast('Generating files...');
+    // Identify all unique shapes across all frames
+    const allShapeIds = new Set();
+    frames.forEach(f => f.shapes.forEach(s => allShapeIds.add(s.id)));
 
-    await saveFile(cContent, `${name}.c`, 'text/x-c');
+    // Create map of ID to variable name
+    const idToVar = {};
+    let shapeIdx = 0;
+    allShapeIds.forEach(id => {
+        idToVar[id] = `obj_${shapeIdx++}`;
+        cContent += `    lv_obj_t * ${idToVar[id]} = NULL;\n`;
+    });
 
-    // Small delay to ensure first file is saved
-    await new Promise(resolve => setTimeout(resolve, 500));
+    cContent += `\n`;
 
-    await saveFile(hContent, `${name}.h`, 'text/x-c');
+    // 2. Initial Object Creation
+    allShapeIds.forEach(id => {
+        const varName = idToVar[id];
+        // Find first appearance
+        let firstFrame = -1;
+        for (let i = 0; i < frames.length; i++) {
+            if (frames[i].shapes.find(s => s.id === id)) {
+                firstFrame = i; break;
+            }
+        }
 
-    showToast(`✅ Exported ${name}.c and ${name}.h`);
+        if (firstFrame === -1) return;
+        const s = frames[firstFrame].shapes.find(sh => sh.id === id);
+
+        if (s.type === 'rect' || s.type === 'ellipse' || s.type === 'text') {
+            if (s.type === 'text') {
+                cContent += `    ${varName} = lv_label_create(parent);\n`;
+                cContent += `    lv_label_set_text(${varName}, "${s.text.replace(/"/g, '\\"')}");\n`;
+            } else {
+                cContent += `    ${varName} = lv_obj_create(parent);\n`;
+                cContent += `    lv_obj_set_size(${varName}, ${Math.round(s.width)}, ${Math.round(s.height)});\n`;
+                if (s.type === 'ellipse') {
+                    cContent += `    lv_obj_set_style_radius(${varName}, LV_RADIUS_CIRCLE, 0);\n`;
+                } else {
+                    cContent += `    lv_obj_set_style_radius(${varName}, 0, 0);\n`;
+                }
+                cContent += `    lv_obj_set_style_bg_color(${varName}, lv_color_hex(0x${s.color.replace('#', '')}), 0);\n`;
+                cContent += `    lv_obj_set_style_border_width(${varName}, 0, 0);\n`;
+            }
+
+            cContent += `    lv_obj_set_pos(${varName}, ${Math.round(s.x)}, ${Math.round(s.y)});\n`;
+            cContent += `    lv_obj_set_style_bg_opa(${varName}, ${Math.round(s.opacity * 255)}, 0);\n`;
+
+            // Hide if not in first frame
+            if (firstFrame > 0) {
+                cContent += `    lv_obj_add_flag(${varName}, LV_OBJ_FLAG_HIDDEN);\n`;
+            }
+        }
+    });
+
+    // 3. Generate Animations
+    const easingMap = {
+        'linear': 'lv_anim_path_linear',
+        'ease-in': 'lv_anim_path_ease_in',
+        'ease-out': 'lv_anim_path_ease_out',
+        'ease-in-out': 'lv_anim_path_ease_in_out',
+        'overshoot': 'lv_anim_path_overshoot',
+        'bounce': 'lv_anim_path_bounce'
+    };
+    const globalEasing = document.getElementById('easing-mode')?.value || 'linear';
+    const lvglEasing = easingMap[globalEasing] || 'lv_anim_path_linear';
+
+    let timeAccum = 0;
+    for (let i = 0; i < frames.length - 1; i++) {
+        const f1 = frames[i];
+        const f2 = frames[i + 1];
+        const duration = f1.duration;
+
+        f1.shapes.forEach(s1 => {
+            const s2 = f2.shapes.find(s => s.id === s1.id);
+            if (s2) {
+                const varName = idToVar[s1.id];
+                const props = [
+                    { key: 'x', cb: 'lv_obj_set_x' },
+                    { key: 'y', cb: 'lv_obj_set_y' },
+                    { key: 'width', cb: 'lv_obj_set_width' },
+                    { key: 'height', cb: 'lv_obj_set_height' },
+                    { key: 'opacity', cb: '_lv_obj_set_bg_opa_anim', scale: 255 }
+                ];
+
+                props.forEach(p => {
+                    if (s1.type === 'text' && (p.key === 'width' || p.key === 'height')) return;
+
+                    const v1 = p.scale ? s1[p.key] * p.scale : s1[p.key];
+                    const v2 = p.scale ? s2[p.key] * p.scale : s2[p.key];
+
+                    if (Math.abs(v1 - v2) > 0.1) {
+                        cContent += `    {\n`;
+                        cContent += `        lv_anim_t a;\n`;
+                        cContent += `        lv_anim_init(&a);\n`;
+                        cContent += `        lv_anim_set_var(&a, ${varName});\n`;
+                        cContent += `        lv_anim_set_values(&a, ${Math.round(v1)}, ${Math.round(v2)});\n`;
+                        cContent += `        lv_anim_set_time(&a, ${duration});\n`;
+                        cContent += `        lv_anim_set_delay(&a, ${timeAccum});\n`;
+                        cContent += `        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)${p.cb});\n`;
+                        cContent += `        lv_anim_set_path_cb(&a, ${lvglEasing});\n`;
+                        cContent += `        lv_anim_start(&a);\n`;
+                        cContent += `    }\n`;
+                    }
+                });
+            }
+        });
+
+        // Handle appearing/disappearing objects (Show/Hide)
+        f2.shapes.forEach(s2 => {
+            if (!f1.shapes.find(s => s.id === s2.id)) {
+                // Object appears at f2
+                const varName = idToVar[s2.id];
+                cContent += `    // Show ${varName} at ${timeAccum + duration}ms\n`;
+                // Simple delay to show
+                cContent += `    {\n`;
+                cContent += `        lv_anim_t a;\n`;
+                cContent += `        lv_anim_init(&a);\n`;
+                cContent += `        lv_anim_set_var(&a, ${varName});\n`;
+                cContent += `        lv_anim_set_values(&a, 0, 1);\n`;
+                cContent += `        lv_anim_set_time(&a, 1);\n`;
+                cContent += `        lv_anim_set_delay(&a, ${timeAccum + duration});\n`;
+                cContent += `        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_clear_flag);\n`;
+                cContent += `        // Note: LV_OBJ_FLAG_HIDDEN is usually what we clear\n`;
+                cContent += `    }\n`;
+            }
+        });
+
+        timeAccum += duration;
+    }
+
+    cContent += `}\n`;
+
+    await saveFile(cContent, `${name}_native.c`, 'text/x-c');
+    showToast(`✅ Exported ${name}_native.c`);
 }
 
 // ======== SEND TO ROBOT (BRIDGE) ========
@@ -2628,7 +2740,7 @@ function renderPreview(frameIndex, interpolation = null) {
         pCtx.drawImage(frame.cacheCanvas, 0, 0);
 
         // 3. Helper to draw any shape properties
-        const drawShapeProps = (ctx, props) => {
+        const drawPreviewShape = (ctx, props) => {
             if (!props) return;
             ctx.save();
             ctx.globalAlpha = (props.opacity !== undefined && !isNaN(props.opacity)) ? props.opacity : 1;
@@ -2643,79 +2755,79 @@ function renderPreview(frameIndex, interpolation = null) {
             const h = props.height || 0;
             const rotation = props.rotation || 0;
 
-            // Apply rotation around the center of the shape
             if (rotation !== 0) {
-                ctx.translate(x + w / 2, y + h / 2);
+                const cx = x + w / 2;
+                const cy = y + h / 2;
+                ctx.translate(cx, cy);
                 ctx.rotate((rotation * Math.PI) / 180);
-                ctx.translate(-(x + w / 2), -(y + h / 2));
+                ctx.translate(-cx, -cy);
             }
 
             if (props.type === 'rect') {
                 ctx.fillRect(x, y, w, h);
             } else if (props.type === 'ellipse') {
                 ctx.beginPath();
-                ctx.ellipse(
-                    x + w / 2,
-                    y + h / 2,
-                    Math.abs(w / 2),
-                    Math.abs(h / 2),
-                    0, 0, Math.PI * 2
-                );
+                ctx.ellipse(x + w / 2, y + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
                 ctx.fill();
             } else if (props.type === 'line' && props.lineEnd) {
                 ctx.beginPath();
                 ctx.moveTo(x, y);
-                ctx.lineTo(props.lineEnd.x || 0, props.lineEnd.y || 0);
+                ctx.lineTo(props.lineEnd.x, props.lineEnd.y);
                 ctx.stroke();
+            } else if (props.type === 'text') {
+                ctx.font = `${props.fontSize || 16}px Inter, sans-serif`;
+                ctx.fillText(props.text || '', x, y + (props.fontSize || 16));
             }
             ctx.restore();
         };
 
         // 4. Render Shapes (Interpolated if needed)
         if (frame.shapes && frame.shapes.length > 0) {
-            pCtx.globalAlpha = 1.0;
-            pCtx.globalCompositeOperation = 'source-over';
+            const nextFrame = interpolation ? interpolation.nextFrame : null;
+            let t = interpolation ? interpolation.t : 0;
 
-            // Shape lookup map for speed
-            const nextShapesMap = new Map();
-            if (interpolation && interpolation.nextFrame && interpolation.nextFrame.shapes) {
-                interpolation.nextFrame.shapes.forEach(s => nextShapesMap.set(s.id, s));
+            // Apply Easing if not already applied in the caller
+            if (interpolation && !interpolation.eased) {
+                const easingMode = document.getElementById('easing-mode')?.value || 'linear';
+                t = applyEasing(t, easingMode);
             }
 
-            frame.shapes.forEach(shape => {
-                let props = shape;
+            const allIds = new Set([
+                ...frame.shapes.map(s => s.id),
+                ...(nextFrame ? nextFrame.shapes.map(s => s.id) : [])
+            ]);
 
-                // Interpolation Logic
-                if (interpolation && interpolation.nextFrame && interpolation.t > 0) {
-                    const nextShape = nextShapesMap.get(shape.id);
-                    if (nextShape && nextShape.type === shape.type) {
-                        props = {
-                            type: shape.type,
-                            x: lerp(shape.x, nextShape.x, interpolation.t),
-                            y: lerp(shape.y, nextShape.y, interpolation.t),
-                            width: lerp(shape.width, nextShape.width, interpolation.t),
-                            height: lerp(shape.height, nextShape.height, interpolation.t),
-                            rotation: lerp(shape.rotation || 0, nextShape.rotation || 0, interpolation.t),
-                            color: shape.color,
-                            opacity: lerp(
-                                shape.opacity !== undefined ? shape.opacity : 1,
-                                nextShape.opacity !== undefined ? nextShape.opacity : 1,
-                                interpolation.t
-                            ),
-                            blendMode: shape.blendMode,
-                            lineEnd: null
-                        };
+            allIds.forEach(id => {
+                const s1 = frame.shapes.find(s => s.id === id);
+                const s2 = nextFrame ? nextFrame.shapes.find(s => s.id === id) : null;
 
-                        // Fix line end interpolation
-                        if (shape.type === 'line' && shape.lineEnd && nextShape.lineEnd) {
-                            props.lineEnd = {
-                                x: lerp(shape.lineEnd.x, nextShape.lineEnd.x, interpolation.t),
-                                y: lerp(shape.lineEnd.y, nextShape.lineEnd.y, interpolation.t)
-                            };
-                        }
-                    }
+                let props = null;
+
+                if (s1 && s2 && s1.type === s2.type) {
+                    props = {
+                        type: s1.type,
+                        x: lerp(s1.x, s2.x, t),
+                        y: lerp(s1.y, s2.y, t),
+                        width: lerp(s1.width, s2.width, t),
+                        height: lerp(s1.height, s2.height, t),
+                        rotation: lerp(s1.rotation || 0, s2.rotation || 0, t),
+                        color: s1.color,
+                        opacity: lerp(s1.opacity !== undefined ? s1.opacity : 1, s2.opacity !== undefined ? s2.opacity : 1, t),
+                        blendMode: s1.blendMode,
+                        text: s1.text,
+                        fontSize: s1.fontSize,
+                        lineEnd: (s1.type === 'line' && s1.lineEnd && s2.lineEnd) ? {
+                            x: lerp(s1.lineEnd.x, s2.lineEnd.x, t),
+                            y: lerp(s1.lineEnd.y, s2.lineEnd.y, t)
+                        } : null
+                    };
+                } else if (s1) {
+                    props = { ...s1, opacity: s1.opacity * (1 - t) };
+                } else if (s2 && t > 0) {
+                    props = { ...s2, opacity: s2.opacity * t };
                 }
-                drawShapeProps(pCtx, props);
+
+                if (props) drawPreviewShape(pCtx, props);
             });
         }
     } catch (err) {
