@@ -9,7 +9,10 @@ let isDrawing = false;
 let isPlaying = false;
 let currentTool = 'pen';
 let currentColor = '#00ffff';
+let brushSize = 1;
+let isSymmetryEnabled = false;
 let lastCoords = null; // Track latest mouse coords for sync drawing
+let copiedFrameData = null;
 
 
 // Multi-Select & Clipboard
@@ -145,6 +148,36 @@ class Frame {
         this.shapes = [];
         this.duration = 100;
         this.id = Date.now() + Math.random();
+        this.cacheCanvas = document.createElement('canvas');
+        this.cacheCanvas.width = GRID_WIDTH;
+        this.cacheCanvas.height = GRID_HEIGHT;
+        this.cacheCtx = this.cacheCanvas.getContext('2d');
+        this.isCacheDirty = true;
+    }
+
+    updateCache() {
+        const ctx = this.cacheCtx;
+        ctx.clearRect(0, 0, GRID_WIDTH, GRID_HEIGHT);
+
+        const imgData = ctx.createImageData(GRID_WIDTH, GRID_HEIGHT);
+        const data = imgData.data;
+
+        for (let i = 0; i < this.pixels.length; i++) {
+            const color = this.pixels[i];
+            if (color) {
+                // Inline hex to rgb for speed
+                const r = parseInt(color.slice(1, 3), 16);
+                const g = parseInt(color.slice(3, 5), 16);
+                const b = parseInt(color.slice(5, 7), 16);
+                const idx = i * 4;
+                data[idx] = r;
+                data[idx + 1] = g;
+                data[idx + 2] = b;
+                data[idx + 3] = 255;
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        this.isCacheDirty = false;
     }
 }
 
@@ -214,12 +247,37 @@ function init() {
     const addBtn = document.getElementById('add-frame-btn');
     const dupBtn = document.getElementById('dup-frame-btn');
     const delBtn = document.getElementById('del-frame-btn');
+    const copyBtn = document.getElementById('copy-frame-btn');
+    const pasteBtn = document.getElementById('paste-frame-btn');
+    const reverseBtn = document.getElementById('reverse-frames-btn');
 
-    if (addBtn) addBtn.onclick = () => { console.log('Add Frame Clicked'); addFrame(); };
-    if (dupBtn) dupBtn.onclick = () => { console.log('Dup Frame Clicked'); duplicateFrame(); };
-    if (delBtn) delBtn.onclick = () => { console.log('Del Frame Clicked'); deleteFrame(); };
+    if (addBtn) addBtn.onclick = addFrame;
+    if (dupBtn) dupBtn.onclick = duplicateFrame;
+    if (delBtn) delBtn.onclick = deleteFrame;
+    if (copyBtn) copyBtn.onclick = copyFrame;
+    if (pasteBtn) pasteBtn.onclick = pasteFrame;
+    if (reverseBtn) reverseBtn.onclick = reverseFrames;
 
-    // Playback Controls - FIXED!
+    // Easing Mode Changes
+    const easingModeSelect = document.getElementById('easing-mode');
+    if (easingModeSelect) {
+        easingModeSelect.addEventListener('change', (e) => {
+            const container = document.getElementById('curve-preview-container');
+            if (e.target.value === 'custom') {
+                container?.classList.remove('hidden');
+            } else {
+                container?.classList.add('hidden');
+            }
+            drawCurvePreview();
+        });
+    }
+
+    // Bezier Sliders
+    ['bezier-p1x', 'bezier-p1y', 'bezier-p2x', 'bezier-p2y'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', drawCurvePreview);
+    });
+
+    // Playback Controls
     const playBtn = document.getElementById('play-btn');
     const stopBtn = document.getElementById('stop-btn');
     const exportCBtn = document.getElementById('export-c-btn');
@@ -238,13 +296,21 @@ function init() {
         });
     }
 
-    // Brush Size - FIXED!
-    const brushSizeSlider = document.getElementById('brush-size');
-    const brushSizeValue = document.getElementById('brush-size-value');
+    // Brush Size
+    const brushSizeSlider = document.getElementById('brush-size-slider');
+    const brushSizeValue = document.getElementById('brush-size-val');
     if (brushSizeSlider) {
         brushSizeSlider.addEventListener('input', (e) => {
             brushSize = parseInt(e.target.value);
-            if (brushSizeValue) brushSizeValue.textContent = brushSize;
+            if (brushSizeValue) brushSizeValue.textContent = brushSize + 'px';
+        });
+    }
+
+    // Symmetry Toggle
+    const symmetryToggle = document.getElementById('symmetry-toggle');
+    if (symmetryToggle) {
+        symmetryToggle.addEventListener('change', (e) => {
+            isSymmetryEnabled = e.target.checked;
         });
     }
 
@@ -601,15 +667,7 @@ function duplicateFrame() {
     if (!srcFrame) return;
 
     const newFrame = new Frame();
-    newFrame.duration = srcFrame.duration;
-
-    // Copy Pixels
-    newFrame.pixels = [...srcFrame.pixels];
-
-    // Copy Shapes (Maintain IDs for morphing!)
-    if (srcFrame.shapes) {
-        newFrame.shapes = srcFrame.shapes.map(s => s.clone(true));
-    }
+    restoreFrame(newFrame, serializeFrame(srcFrame));
 
     frames.splice(currentFrameIndex + 1, 0, newFrame);
     currentFrameIndex++;
@@ -617,6 +675,40 @@ function duplicateFrame() {
 
     renderTimeline();
     renderEditor();
+}
+
+function copyFrame() {
+    if (frames[currentFrameIndex]) {
+        copiedFrameData = serializeFrame(frames[currentFrameIndex]);
+        // Visual feedback
+        const btn = document.getElementById('copy-frame-btn');
+        if (btn) {
+            btn.classList.add('text-accent');
+            setTimeout(() => btn.classList.remove('text-accent'), 500);
+        }
+    }
+}
+
+function pasteFrame() {
+    if (copiedFrameData) {
+        saveUndo();
+        const newFrame = new Frame();
+        restoreFrame(newFrame, copiedFrameData);
+        frames.splice(currentFrameIndex + 1, 0, newFrame);
+        currentFrameIndex++;
+        renderTimeline();
+        renderEditor();
+    }
+}
+
+function reverseFrames() {
+    if (frames.length > 1) {
+        saveUndo();
+        frames.reverse();
+        currentFrameIndex = 0;
+        renderTimeline();
+        renderEditor();
+    }
 }
 
 function deleteFrame() {
@@ -636,7 +728,6 @@ function deleteFrame() {
 }
 
 // Drawing
-let brushSize = 1;
 let startX = 0, startY = 0;
 let undoStack = [];
 
@@ -691,6 +782,7 @@ function restoreFrame(frame, jsonState) {
 
         return shape;
     });
+    frame.isCacheDirty = true;
 }
 
 function saveUndo() {
@@ -740,10 +832,19 @@ function paint(x, y) {
 
     if (currentTool === 'pen' || currentTool === 'brush') {
         drawBrush(x, y, currentColor, brushSize);
+        if (isSymmetryEnabled) {
+            drawBrush(GRID_WIDTH - x, y, currentColor, brushSize);
+        }
     } else if (currentTool === 'eraser') {
         drawBrush(x, y, null, brushSize);
+        if (isSymmetryEnabled) {
+            drawBrush(GRID_WIDTH - x, y, null, brushSize);
+        }
     } else if (currentTool === 'fill') {
         floodFill(x, y, currentColor);
+        if (isSymmetryEnabled) {
+            floodFill(GRID_WIDTH - x, y, currentColor);
+        }
     }
     renderEditor(); // This will also call renderPreview
 }
@@ -751,11 +852,17 @@ function paint(x, y) {
 function drawBrush(cx, cy, color, size) {
     const frame = frames[currentFrameIndex];
     if (!frame) return;
+
     const half = Math.floor(size / 2);
+    const radiusSq = (size / 2) ** 2;
+
     for (let dy = -half; dy <= half; dy++) {
         for (let dx = -half; dx <= half; dx++) {
-            const x = cx + dx;
-            const y = cy + dy;
+            // Circular brush logic
+            if (size > 2 && (dx * dx + dy * dy) > radiusSq) continue;
+
+            const x = Math.round(cx + dx);
+            const y = Math.round(cy + dy);
             const idx = getPixelIndex(x, y);
             if (idx !== -1) {
                 frame.pixels[idx] = color;
@@ -766,8 +873,17 @@ function drawBrush(cx, cy, color, size) {
 }
 
 function drawPixel(x, y, color) {
-    ctx.fillStyle = color || '#000000';
+    if (!color) {
+        ctx.clearRect(x, y, 1, 1);
+        return;
+    }
+    ctx.fillStyle = color;
     ctx.fillRect(x, y, 1, 1);
+
+    // Also mark cache as dirty but we don't full updateCache here for performance during drag
+    // Instead we will update before renderEditor is finished if needed, 
+    // but paint calls renderEditor which currently redraws everything.
+    // To make it super fast, we should just let paint draw on screen and update the buffer.
 }
 
 function floodFill(startX, startY, color) {
@@ -797,23 +913,8 @@ function renderEditor() {
     const frame = frames[currentFrameIndex];
     if (!frame) return;
 
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    const data = imgData.data;
-
-    for (let i = 0; i < frame.pixels.length; i++) {
-        const color = frame.pixels[i];
-        if (color) {
-            const r = parseInt(color.slice(1, 3), 16);
-            const g = parseInt(color.slice(3, 5), 16);
-            const b = parseInt(color.slice(5, 7), 16);
-            const idx = i * 4;
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-        }
-    }
-    ctx.putImageData(imgData, 0, 0);
+    if (frame.isCacheDirty) frame.updateCache();
+    ctx.drawImage(frame.cacheCanvas, 0, 0);
 
     if (frame.shapes && frame.shapes.length > 0) {
         frame.shapes.forEach(shape => shape.draw(ctx));
@@ -1126,9 +1227,24 @@ function setupEventListeners() {
 
             // Pixel Shapes (Direct Draw)
             if (['line', 'rect', 'circle'].includes(currentTool)) {
-                if (currentTool === 'line') drawLineOnFrame(startX, startY, coords.x, coords.y, currentColor);
-                else if (currentTool === 'rect') drawRectOnFrame(startX, startY, coords.x, coords.y, currentColor);
-                else if (currentTool === 'circle') drawCircleOnFrame(startX, startY, coords.x, coords.y, currentColor);
+                if (currentTool === 'line') {
+                    drawLineOnFrame(startX, startY, coords.x, coords.y, currentColor);
+                    if (isSymmetryEnabled) {
+                        drawLineOnFrame(GRID_WIDTH - startX, startY, GRID_WIDTH - coords.x, coords.y, currentColor);
+                    }
+                }
+                else if (currentTool === 'rect') {
+                    drawRectOnFrame(startX, startY, coords.x, coords.y, currentColor);
+                    if (isSymmetryEnabled) {
+                        drawRectOnFrame(GRID_WIDTH - startX, startY, GRID_WIDTH - coords.x, coords.y, currentColor);
+                    }
+                }
+                else if (currentTool === 'circle') {
+                    drawCircleOnFrame(startX, startY, coords.x, coords.y, currentColor);
+                    if (isSymmetryEnabled) {
+                        drawCircleOnFrame(GRID_WIDTH - startX, startY, GRID_WIDTH - coords.x, coords.y, currentColor);
+                    }
+                }
             }
             // Vector Objects
             else {
@@ -1168,6 +1284,18 @@ function setupEventListeners() {
                 if (newShape) {
                     saveUndo(); // Save state before adding
                     frame.shapes.push(newShape);
+
+                    if (isSymmetryEnabled) {
+                        const mirroredShape = newShape.clone();
+                        if (newShape.type === 'line') {
+                            mirroredShape.x = GRID_WIDTH - newShape.x;
+                            mirroredShape.lineEnd.x = GRID_WIDTH - newShape.lineEnd.x;
+                        } else {
+                            mirroredShape.x = GRID_WIDTH - newShape.x - newShape.width;
+                        }
+                        frame.shapes.push(mirroredShape);
+                    }
+
                     selectedShape = newShape; // Auto-select new shape
                     updateLayersPanel();
                 }
@@ -1482,11 +1610,14 @@ function startPlay() {
             currentFrameIndex = foundIndex;
             renderEditor();
 
-            // Highlight active block
-            document.querySelectorAll('.frame-block').forEach(b => b.classList.remove('active'));
-            const activeBlock = document.querySelector(`.frame-block[data-index="${currentFrameIndex}"]`);
-            if (activeBlock) {
-                activeBlock.classList.add('active');
+            // Highlight active block - OPTIMIZED: only update if changed
+            const timelineArea = document.getElementById('timeline-area');
+            if (timelineArea) {
+                const prevActive = timelineArea.querySelector('.frame-block.active');
+                if (prevActive) prevActive.classList.remove('active');
+
+                const currentBlock = timelineArea.querySelector(`.frame-block[data-index="${currentFrameIndex}"]`);
+                if (currentBlock) currentBlock.classList.add('active');
             }
         }
 
@@ -1512,6 +1643,9 @@ function startPlay() {
         if (playhead) {
             playhead.style.left = `${pixels}px`;
         }
+
+        // Update timer text directly
+        updatePlayheadTime(currentTime);
 
         animFrameId = requestAnimationFrame(animate);
     };
@@ -1560,7 +1694,106 @@ function applyEasing(t, type) {
             else return 7.5625 * (t -= (2.625 / 2.75)) * t + 0.984375;
         case 'spring':
             return 1 - Math.pow(Math.E, -5 * t) * Math.cos(10 * t);
+        case 'custom':
+            const p1x = parseFloat(document.getElementById('bezier-p1x')?.value || 0.42);
+            const p1y = parseFloat(document.getElementById('bezier-p1y')?.value || 0);
+            const p2x = parseFloat(document.getElementById('bezier-p2x')?.value || 0.58);
+            const p2y = parseFloat(document.getElementById('bezier-p2y')?.value || 1);
+            return getCubicBezier(t, p1x, p1y, p2x, p2y);
         default: return t; // Linear
+    }
+}
+
+function getCubicBezier(t, p1x, p1y, p2x, p2y) {
+    // Basic cubic bezier: (1-t)^3*P0 + 3*(1-t)^2*t*P1 + 3*(1-t)*t^2*P2 + t^3*P3
+    // P0 is (0,0), P3 is (1,1)
+    // We need Y given X=t. This is a simplification where we assume t is roughly X.
+    // For a true cubic bezier as a function of time, we solve for t' such that X(t') = t.
+    // For this UI, t is already the normalized time [0, 1].
+    const cx = 3 * p1x;
+    const bx = 3 * (p2x - p1x) - cx;
+    const ax = 1 - cx - bx;
+    const cy = 3 * p1y;
+    const by = 3 * (p2y - p1y) - cy;
+    const ay = 1 - cy - by;
+
+    const sampleCurveX = (t) => ((ax * t + bx) * t + cx) * t;
+    const sampleCurveY = (t) => ((ay * t + by) * t + cy) * t;
+    const sampleCurveDerivativeX = (t) => (3.0 * ax * t + 2.0 * bx) * t + cx;
+
+    // Solve for t' using Newton's method
+    let x = t, t2 = t, i;
+    for (i = 0; i < 8; i++) {
+        x = sampleCurveX(t2) - t;
+        if (Math.abs(x) < 1e-3) break;
+        const d = sampleCurveDerivativeX(t2);
+        if (Math.abs(d) < 1e-3) break;
+        t2 = t2 - x / d;
+    }
+    return sampleCurveY(t2);
+}
+
+function drawCurvePreview() {
+    const canvas = document.getElementById('curve-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const padding = 20;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i < 4; i++) {
+        const x = padding + (w - 2 * padding) * (i / 4);
+        const y = padding + (h - 2 * padding) * (i / 4);
+        ctx.moveTo(x, padding); ctx.lineTo(x, h - padding);
+        ctx.moveTo(padding, y); ctx.lineTo(w - padding, y);
+    }
+    ctx.stroke();
+
+    const p1x = parseFloat(document.getElementById('bezier-p1x')?.value || 0.42);
+    const p1y = parseFloat(document.getElementById('bezier-p1y')?.value || 0);
+    const p2x = parseFloat(document.getElementById('bezier-p2x')?.value || 0.58);
+    const p2y = parseFloat(document.getElementById('bezier-p2y')?.value || 1);
+
+    const mapX = (x) => padding + x * (w - 2 * padding);
+    const mapY = (y) => h - (padding + y * (h - 2 * padding));
+
+    // Draw active curve
+    ctx.strokeStyle = 'var(--accent)';
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'rgba(0, 210, 255, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(mapX(0), mapY(0));
+
+    const mode = document.getElementById('easing-mode')?.value || 'linear';
+    for (let i = 0; i <= 100; i++) {
+        const t = i / 100;
+        const val = applyEasing(t, mode);
+        ctx.lineTo(mapX(t), mapY(val));
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Draw handles if custom
+    if (mode === 'custom') {
+        ctx.setLineDash([2, 2]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath();
+        ctx.moveTo(mapX(0), mapY(0)); ctx.lineTo(mapX(p1x), mapY(p1y));
+        ctx.moveTo(mapX(1), mapY(1)); ctx.lineTo(mapX(p2x), mapY(p2y));
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#ff0055';
+        ctx.beginPath(); ctx.arc(mapX(p1x), mapY(p1y), 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#00ff66';
+        ctx.beginPath(); ctx.arc(mapX(p2x), mapY(p2y), 4, 0, Math.PI * 2); ctx.fill();
     }
 }
 
@@ -2179,6 +2412,7 @@ async function importFromJSON() {
             renderEditor();
             renderPreview();
             updateFrameInfo();
+            updateLayersPanel();
 
             showToast(`Loaded ${frames.length} frames`);
         } catch (err) {
@@ -2195,32 +2429,32 @@ function updateFrameInfo() {
     const frame = frames[currentFrameIndex];
     if (!frame) return;
 
-    // Update frame index
     const indexEl = document.getElementById('frame-index');
-    if (indexEl) indexEl.textContent = currentFrameIndex;
+    if (indexEl) indexEl.textContent = currentFrameIndex + 1;
 
-    // Update frame duration input
     const durationInput = document.getElementById('frame-duration');
     if (durationInput) durationInput.value = frame.duration;
 
-    // Calculate total time
     const totalMs = frames.reduce((sum, f) => sum + (f.duration || 100), 0);
     const totalTimeEl = document.getElementById('total-time');
     if (totalTimeEl) totalTimeEl.textContent = (totalMs / 1000).toFixed(2) + 's';
 
-    // Update playhead time if not playing
     if (!isPlaying) {
         let timeMs = 0;
         for (let i = 0; i < currentFrameIndex; i++) {
             timeMs += frames[i].duration || 100;
         }
-        const playheadTimeEl = document.getElementById('playhead-time');
-        if (playheadTimeEl) {
-            const mins = Math.floor(timeMs / 60000);
-            const secs = Math.floor((timeMs % 60000) / 1000);
-            const ms = timeMs % 1000;
-            playheadTimeEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
-        }
+        updatePlayheadTime(timeMs);
+    }
+}
+
+function updatePlayheadTime(timeMs) {
+    const playheadTimeEl = document.getElementById('playhead-time');
+    if (playheadTimeEl) {
+        const mins = Math.floor(timeMs / 60000);
+        const secs = Math.floor((timeMs % 60000) / 1000);
+        const ms = Math.floor(timeMs % 1000);
+        playheadTimeEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
     }
 }
 
@@ -2251,23 +2485,8 @@ function renderEditorWithOnion() {
             ctx.globalAlpha = onionSkinOpacity;
 
             // Draw previous frame pixels
-            const imgData = ctx.createImageData(canvas.width, canvas.height);
-            const data = imgData.data;
-            for (let i = 0; i < prevFrame.pixels.length; i++) {
-                const color = prevFrame.pixels[i];
-                if (color) {
-                    const r = parseInt(color.slice(1, 3), 16);
-                    const g = parseInt(color.slice(3, 5), 16);
-                    const b = parseInt(color.slice(5, 7), 16);
-                    const idx = i * 4;
-                    // Tint red for previous frame
-                    data[idx] = Math.min(255, r + 100);
-                    data[idx + 1] = g * 0.5;
-                    data[idx + 2] = b * 0.5;
-                    data[idx + 3] = 128;
-                }
-            }
-            ctx.putImageData(imgData, 0, 0);
+            if (prevFrame.isCacheDirty) prevFrame.updateCache();
+            ctx.drawImage(prevFrame.cacheCanvas, 0, 0);
 
             // Draw shapes
             if (prevFrame.shapes) {
@@ -2282,23 +2501,8 @@ function renderEditorWithOnion() {
     }
 
     // Draw current frame pixels
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    const data = imgData.data;
-
-    for (let i = 0; i < frame.pixels.length; i++) {
-        const color = frame.pixels[i];
-        if (color) {
-            const r = parseInt(color.slice(1, 3), 16);
-            const g = parseInt(color.slice(3, 5), 16);
-            const b = parseInt(color.slice(5, 7), 16);
-            const idx = i * 4;
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-        }
-    }
-    ctx.putImageData(imgData, 0, 0);
+    if (frame.isCacheDirty) frame.updateCache();
+    ctx.drawImage(frame.cacheCanvas, 0, 0);
 
     // Draw shapes
     if (frame.shapes && frame.shapes.length > 0) {
@@ -2368,25 +2572,8 @@ function renderPreview(frameIndex, interpolation = null) {
         pCtx.fillRect(0, 0, pCanvas.width, pCanvas.height);
 
         // 2. Render Pixels
-        const imgData = pCtx.createImageData(GRID_WIDTH, GRID_HEIGHT);
-        const data = imgData.data;
-
-        if (frame.pixels) {
-            for (let i = 0; i < frame.pixels.length; i++) {
-                const color = frame.pixels[i];
-                if (color) {
-                    const r = parseInt(color.slice(1, 3), 16);
-                    const g = parseInt(color.slice(3, 5), 16);
-                    const b = parseInt(color.slice(5, 7), 16);
-                    const idx = i * 4;
-                    data[idx] = r;
-                    data[idx + 1] = g;
-                    data[idx + 2] = b;
-                    data[idx + 3] = 255;
-                }
-            }
-        }
-        pCtx.putImageData(imgData, 0, 0);
+        if (frame.isCacheDirty) frame.updateCache();
+        pCtx.drawImage(frame.cacheCanvas, 0, 0);
 
         // 3. Helper to draw any shape properties
         const drawShapeProps = (ctx, props) => {
@@ -2437,12 +2624,18 @@ function renderPreview(frameIndex, interpolation = null) {
             pCtx.globalAlpha = 1.0;
             pCtx.globalCompositeOperation = 'source-over';
 
+            // Shape lookup map for speed
+            const nextShapesMap = new Map();
+            if (interpolation && interpolation.nextFrame && interpolation.nextFrame.shapes) {
+                interpolation.nextFrame.shapes.forEach(s => nextShapesMap.set(s.id, s));
+            }
+
             frame.shapes.forEach(shape => {
                 let props = shape;
 
                 // Interpolation Logic
                 if (interpolation && interpolation.nextFrame && interpolation.t > 0) {
-                    const nextShape = interpolation.nextFrame.shapes ? interpolation.nextFrame.shapes.find(s => s.id === shape.id) : null;
+                    const nextShape = nextShapesMap.get(shape.id);
                     if (nextShape && nextShape.type === shape.type) {
                         props = {
                             type: shape.type,

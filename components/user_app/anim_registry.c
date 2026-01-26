@@ -14,6 +14,7 @@
 
 // ========================================
 // Include your animation headers here
+#include "animations/my_anim.h"
 // ========================================
 
 
