@@ -156,6 +156,43 @@ static void init_pools(lv_obj_t *parent) {
   }
 }
 
+// Easing Helper
+static float apply_easing(float t, uint8_t type) {
+  if (t <= 0.0f)
+    return 0.0f;
+  if (t >= 1.0f)
+    return 1.0f;
+
+  switch (type) {
+  case 1:
+    return t * t; // EaseIn
+  case 2:
+    return t * (2.0f - t); // EaseOut
+  case 3:
+    return t < 0.5f ? 2.0f * t * t : -1.0f + (4.0f - 2.0f * t) * t; // EaseInOut
+  case 4: { // Overshoot (Back)
+    const float s = 1.70158f;
+    return (t - 1.0f) * (t - 1.0f) * ((s + 1.0f) * (t - 1.0f) + s) + 1.0f;
+  }
+  case 5: { // Bounce Out
+    if (t < (1 / 2.75f))
+      return 7.5625f * t * t;
+    else if (t < (2 / 2.75f)) {
+      t -= (1.5f / 2.75f);
+      return 7.5625f * t * t + 0.75f;
+    } else if (t < (2.5f / 2.75f)) {
+      t -= (2.25f / 2.75f);
+      return 7.5625f * t * t + 0.9375f;
+    } else {
+      t -= (2.625f / 2.75f);
+      return 7.5625f * t * t + 0.984375f;
+    }
+  }
+  default:
+    return t; // Linear
+  }
+}
+
 static void reset_pools(void) {
   for (int i = 0; i < POOL_SIZE_OBJ; i++) {
     lv_obj_add_flag(obj_pool[i].obj, LV_OBJ_FLAG_HIDDEN);
@@ -317,6 +354,10 @@ void anim_manager_update(void) {
 
   uint32_t dur = current_vector_data->frames[found_frame].duration_ms;
   float t = (dur > 0) ? (float)local_time / dur : 0.0f;
+
+  // Apply Easing
+  t = apply_easing(t, current_vector_data->frames[found_frame].easing);
+
   const anim_vector_frame_t *f1 = &current_vector_data->frames[found_frame];
   const anim_vector_frame_t *f2 =
       &current_vector_data
@@ -398,4 +439,87 @@ void anim_manager_list_all(void) {
   for (uint8_t i = 0; i < anim_count; i++)
     printf("  %d. '%s' [%s]\n", i + 1, anim_registry[i].name,
            anim_registry[i].is_vector ? "VECTOR" : "BITMAP");
+}
+
+// Binary Loader for .rbat files (Updated for Easing)
+bool anim_manager_load_rbat(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (!f)
+    return false;
+
+  char magic[4];
+  fread(magic, 1, 4, f);
+  if (memcmp(magic, "RBAT", 4) != 0) {
+    fclose(f);
+    return false;
+  }
+
+  uint16_t version, width, height, frame_count;
+  uint32_t reserved;
+  fread(&version, 2, 1, f);
+  fread(&width, 2, 1, f);
+  fread(&height, 2, 1, f);
+  fread(&frame_count, 2, 1, f);
+  fread(&reserved, 4, 1, f);
+
+  anim_vector_t *vector = (anim_vector_t *)malloc(sizeof(anim_vector_t));
+  ((char **)&vector->name)[0] = strdup(path);
+  vector->frame_count = frame_count;
+
+  anim_vector_frame_t *write_frames =
+      (anim_vector_frame_t *)malloc(sizeof(anim_vector_frame_t) * frame_count);
+  ((anim_vector_frame_t **)&vector->frames)[0] = write_frames;
+
+  for (uint16_t i = 0; i < frame_count; i++) {
+    uint16_t duration, shape_count;
+    uint8_t easing;
+    fread(&duration, 2, 1, f);
+    fread(&shape_count, 2, 1, f);
+    fread(&easing, 1, 1, f);
+
+    write_frames[i].duration_ms = duration;
+    write_frames[i].shape_count = shape_count;
+    write_frames[i].easing = easing;
+
+    anim_shape_t *write_shapes =
+        (anim_shape_t *)malloc(sizeof(anim_shape_t) * shape_count);
+    ((anim_shape_t **)&write_frames[i].shapes)[0] = write_shapes;
+
+    for (uint16_t j = 0; j < shape_count; j++) {
+      anim_shape_t *s = &write_shapes[j];
+      uint8_t type;
+      fread(&type, 1, 1, f);
+      s->type = type;
+      fread(&s->x, 4, 1, f);
+      fread(&s->y, 4, 1, f);
+      fread(&s->w, 4, 1, f);
+      fread(&s->h, 4, 1, f);
+      fread(&s->rotation, 4, 1, f);
+      fread(&s->opacity, 4, 1, f);
+
+      uint32_t color_hex;
+      fread(&color_hex, 4, 1, f); // 0xRRGGBB
+      s->color = color_hex;
+
+      fread(&s->x2, 4, 1, f);
+      fread(&s->y2, 4, 1, f);
+
+      uint8_t font_size;
+      uint16_t text_len;
+      fread(&font_size, 1, 1, f);
+      fread(&text_len, 2, 1, f);
+      s->font_size = font_size;
+
+      if (text_len > 0) {
+        char *text = (char *)malloc(text_len + 1);
+        fread(text, 1, text_len, f);
+        text[text_len] = '\0';
+        s->text = text;
+      } else {
+        s->text = NULL;
+      }
+    }
+  }
+  fclose(f);
+  return anim_manager_register_vector(vector);
 }

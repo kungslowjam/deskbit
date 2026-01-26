@@ -36,6 +36,8 @@ typedef struct {
   const anim_shape_t *shapes;
   uint16_t shape_count;
   uint16_t duration_ms;
+  uint8_t
+      easing; // 0: Linear, 1: EaseIn, 2: EaseOut, 3: EaseInOut, 4: Overshoot
 } anim_vector_frame_t;
 
 // Vector Animation

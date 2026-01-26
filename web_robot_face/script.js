@@ -378,7 +378,7 @@ function init() {
     // Frame Duration - FIXED!
     const frameDurationInput = document.getElementById('frame-duration');
     if (frameDurationInput) {
-        frameDurationInput.addEventListener('change', (e) => {
+        frameDurationInput.addEventListener('input', (e) => {
             const frame = frames[currentFrameIndex];
             if (frame) {
                 frame.duration = parseInt(e.target.value) || 100;
@@ -386,6 +386,8 @@ function init() {
                 updateFrameInfo();
             }
         });
+        // Also handle change for final validation
+        frameDurationInput.addEventListener('change', () => updateFrameInfo());
     }
 
     // Import JSON - FIXED!
@@ -558,6 +560,7 @@ function renderTimeline() {
             currentFrameIndex = index;
             renderTimeline();
             renderEditor();
+            updateFrameInfo();
         };
 
         // Resize Handle
@@ -650,11 +653,16 @@ function endFrameResize(e) {
 
 // Timeline Actions
 function addFrame() {
+    if (frames.length > 0) {
+        duplicateFrame(); // Standard animator behavior: add means copy current
+        return;
+    }
     frames.push(new Frame());
     currentFrameIndex = frames.length - 1;
     selectedFrames = [currentFrameIndex];
     renderTimeline();
     renderEditor();
+    updateFrameInfo();
 }
 
 function duplicateFrame() {
@@ -675,6 +683,7 @@ function duplicateFrame() {
 
     renderTimeline();
     renderEditor();
+    updateFrameInfo();
 }
 
 function copyFrame() {
@@ -698,6 +707,7 @@ function pasteFrame() {
         currentFrameIndex++;
         renderTimeline();
         renderEditor();
+        updateFrameInfo();
     }
 }
 
@@ -708,6 +718,7 @@ function reverseFrames() {
         currentFrameIndex = 0;
         renderTimeline();
         renderEditor();
+        updateFrameInfo();
     }
 }
 
@@ -717,6 +728,7 @@ function deleteFrame() {
         frames[0].shapes = [];
         renderEditor();
         renderTimeline();
+        updateFrameInfo();
         return;
     }
     frames.splice(currentFrameIndex, 1);
@@ -725,6 +737,7 @@ function deleteFrame() {
     }
     renderTimeline();
     renderEditor();
+    updateFrameInfo();
 }
 
 // Drawing
@@ -1835,39 +1848,51 @@ function renderPreview(frameIndex, interpolation = null) {
     }
     pCtx.putImageData(imgData, 0, 0);
 
-    // 3. Render Shapes
-    if (frame.shapes && frame.shapes.length > 0) {
-        frame.shapes.forEach(shape => {
-            let props = shape;
+    // 3. Render Shapes (Interpolated)
+    if (frame.shapes) {
+        // Collect all unique IDs from both frames to handle appearing/disappearing objects
+        const nextFrame = interpolation ? interpolation.nextFrame : null;
+        const t = interpolation ? interpolation.t : 0;
 
-            // Interpolation Logic
-            if (interpolation && interpolation.nextFrame && interpolation.t > 0) {
-                const nextShape = interpolation.nextFrame.shapes.find(s => s.id === shape.id);
-                if (nextShape && nextShape.type === shape.type) {
-                    props = {
-                        type: shape.type,
-                        x: lerp(shape.x, nextShape.x, interpolation.t),
-                        y: lerp(shape.y, nextShape.y, interpolation.t),
-                        width: lerp(shape.width, nextShape.width, interpolation.t),
-                        height: lerp(shape.height, nextShape.height, interpolation.t),
-                        color: shape.color,
-                        opacity: lerp(shape.opacity || 1, nextShape.opacity || 1, interpolation.t),
-                        blendMode: shape.blendMode,
-                        text: shape.text,
-                        fontSize: shape.fontSize,
-                        lineEnd: (shape.type === 'line' && shape.lineEnd && nextShape.lineEnd) ? {
-                            x: lerp(shape.lineEnd.x, nextShape.lineEnd.x, interpolation.t),
-                            y: lerp(shape.lineEnd.y, nextShape.lineEnd.y, interpolation.t)
-                        } : null
-                    };
-                }
+        const allIds = new Set([
+            ...frame.shapes.map(s => s.id),
+            ...(nextFrame ? nextFrame.shapes.map(s => s.id) : [])
+        ]);
+
+        allIds.forEach(id => {
+            const s1 = frame.shapes.find(s => s.id === id);
+            const s2 = nextFrame ? nextFrame.shapes.find(s => s.id === id) : null;
+
+            let props = null;
+
+            if (s1 && s2 && s1.type === s2.type) {
+                // Interpolate
+                props = {
+                    type: s1.type,
+                    x: lerp(s1.x, s2.x, t),
+                    y: lerp(s1.y, s2.y, t),
+                    width: lerp(s1.width, s2.width, t),
+                    height: lerp(s1.height, s2.height, t),
+                    rotation: lerp(s1.rotation || 0, s2.rotation || 0, t),
+                    color: s1.color, // Color lerp is complex, stick to s1 for now
+                    opacity: lerp(s1.opacity !== undefined ? s1.opacity : 1, s2.opacity !== undefined ? s2.opacity : 1, t),
+                    blendMode: s1.blendMode,
+                    text: s1.text,
+                    fontSize: s1.fontSize,
+                    lineEnd: (s1.type === 'line' && s1.lineEnd && s2.lineEnd) ? {
+                        x: lerp(s1.lineEnd.x, s2.lineEnd.x, t),
+                        y: lerp(s1.lineEnd.y, s2.lineEnd.y, t)
+                    } : null
+                };
+            } else if (s1) {
+                // Disappearing (fade out if interpolating)
+                props = { ...s1, opacity: s1.opacity * (1 - t) };
+            } else if (s2 && t > 0) {
+                // Appearing (fade in)
+                props = { ...s2, opacity: s2.opacity * t };
             }
 
-            // Re-use Shape.draw logic if it's a real instance, otherwise use a proxy
-            if (typeof shape.draw === 'function' && !interpolation) {
-                shape.draw(pCtx);
-            } else {
-                // Manual draw for interpolated or non-method objects
+            if (props) {
                 pCtx.save();
                 pCtx.globalAlpha = props.opacity !== undefined ? props.opacity : 1;
                 pCtx.globalCompositeOperation = props.blendMode || 'source-over';
@@ -1875,11 +1900,21 @@ function renderPreview(frameIndex, interpolation = null) {
                 pCtx.strokeStyle = props.color;
                 pCtx.lineWidth = 2;
 
+                // Apply rotation
+                if (props.rotation) {
+                    const cx = props.x + (props.width || 0) / 2;
+                    const cy = props.y + (props.height || 0) / 2;
+                    pCtx.translate(cx, cy);
+                    pCtx.rotate((props.rotation * Math.PI) / 180);
+                    pCtx.translate(-cx, -cy);
+                }
+
                 if (props.type === 'rect') {
                     pCtx.fillRect(props.x, props.y, props.width, props.height);
                 } else if (props.type === 'ellipse') {
                     pCtx.beginPath();
-                    pCtx.ellipse(props.x + props.width / 2, props.y + props.height / 2, Math.abs(props.width / 2), Math.abs(props.height / 2), 0, 0, Math.PI * 2);
+                    pCtx.ellipse(props.x + props.width / 2, props.y + props.height / 2,
+                        Math.abs(props.width / 2), Math.abs(props.height / 2), 0, 0, Math.PI * 2);
                     pCtx.fill();
                 } else if (props.type === 'line' && props.lineEnd) {
                     pCtx.beginPath(); pCtx.moveTo(props.x, props.y); pCtx.lineTo(props.lineEnd.x, props.lineEnd.y); pCtx.stroke();
@@ -2324,6 +2359,7 @@ async function exportToJSON() {
         width: GRID_WIDTH,
         height: GRID_HEIGHT,
         fps: parseInt(document.getElementById('fps-range')?.value || 12),
+        easingMode: document.getElementById('easing-mode')?.value || 'linear',
         frames: frames.map((frame, index) => ({
             index,
             duration: frame.duration,
@@ -2426,26 +2462,42 @@ async function importFromJSON() {
 
 // Update Frame Info Panel
 function updateFrameInfo() {
+    if (!frames || frames.length === 0) return;
     const frame = frames[currentFrameIndex];
     if (!frame) return;
 
+    // 1. Update Index Display
     const indexEl = document.getElementById('frame-index');
     if (indexEl) indexEl.textContent = currentFrameIndex + 1;
 
+    // 2. Update Duration Input (Force value)
     const durationInput = document.getElementById('frame-duration');
-    if (durationInput) durationInput.value = frame.duration;
+    if (durationInput) {
+        durationInput.value = frame.duration;
+        // Visual cue that it's updated
+        durationInput.style.color = '#00d2ff';
+    }
 
-    const totalMs = frames.reduce((sum, f) => sum + (f.duration || 100), 0);
+    // 3. Update Easing/Interpolation if it's stored per frame (optional, for now use global)
+    // const easingInput = document.getElementById('easing-mode');
+    // if (easingInput && frame.easing) easingInput.value = frame.easing;
+
+    // 4. Update Total Time
+    const totalMs = frames.reduce((sum, f) => sum + (parseInt(f.duration) || 100), 0);
     const totalTimeEl = document.getElementById('total-time');
     if (totalTimeEl) totalTimeEl.textContent = (totalMs / 1000).toFixed(2) + 's';
 
+    // 5. Update Playhead position and time display
     if (!isPlaying) {
         let timeMs = 0;
         for (let i = 0; i < currentFrameIndex; i++) {
-            timeMs += frames[i].duration || 100;
+            timeMs += parseInt(frames[i].duration) || 100;
         }
         updatePlayheadTime(timeMs);
     }
+
+    // 6. Sync Layers count
+    updateLayersPanel();
 }
 
 function updatePlayheadTime(timeMs) {

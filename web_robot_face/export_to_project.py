@@ -381,6 +381,18 @@ def generate_c_file(json_data, output_dir):
         'text': 'SHAPE_TEXT'
     }
 
+    # Easing Mapping
+    easing_map = {
+        'linear': 0,
+        'ease-in': 1,
+        'ease-out': 2,
+        'ease-in-out': 3,
+        'overshoot': 4,
+        'bounce': 5,
+        'spring': 6
+    }
+    global_easing = easing_map.get(json_data.get('easingMode', 'linear'), 0)
+
     # Generate shape arrays for each frame
     frame_list = []
     
@@ -437,7 +449,7 @@ def generate_c_file(json_data, output_dir):
     # Generate frame array
     c_content += f"static const anim_vector_frame_t {anim_name}_frames[] = {{\n"
     for f in frame_list:
-        c_content += f"    {{ {f['var']}, {f['count']}, {int(f['duration'])} }},\n"
+        c_content += f"    {{ {f['var']}, {f['count']}, {int(f['duration'])}, {global_easing} }},\n"
     c_content += "};\n\n"
 
     # Main animation struct
@@ -529,8 +541,10 @@ def export_rbat(json_data, output_path):
             duration = int(frame.get('duration', 100))
             shapes = frame.get('shapes', [])
             
-            # Frame: Duration(2), ShapeCount(2)
-            f.write(struct.pack('<HH', duration, len(shapes)))
+            # Frame: Duration(2), ShapeCount(2), Easing(1)
+            easing_map = {'linear': 0, 'ease-in': 1, 'ease-out': 2, 'ease-in-out': 3, 'overshoot': 4}
+            global_easing = easing_map.get(json_data.get('easingMode', 'linear'), 0)
+            f.write(struct.pack('<HHB', duration, len(shapes), global_easing))
             
             for s in shapes:
                 stype = 0 # Rect
