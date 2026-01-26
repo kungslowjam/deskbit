@@ -3,6 +3,8 @@ let GRID_WIDTH = 466;
 let GRID_HEIGHT = 466;
 
 // State
+let projectStates = [];
+let activeStateId = null;
 let frames = [];
 let currentFrameIndex = 0;
 let isDrawing = false;
@@ -38,6 +40,38 @@ const MAX_ZOOM = 8;
 // Timeline Globals
 const PIXELS_PER_SEC = 100;
 
+function lerp(start, end, t) {
+    if (start === undefined || end === undefined) return start ?? end;
+    return start + (end - start) * t;
+}
+
+function lerpColor(c1, c2, t) {
+    if (!c1 || !c2) return c1 || c2;
+    try {
+        const r1 = parseInt(c1.substring(1, 3), 16);
+        const g1 = parseInt(c1.substring(3, 5), 16);
+        const b1 = parseInt(c1.substring(5, 7), 16);
+        const r2 = parseInt(c2.substring(1, 3), 16);
+        const g2 = parseInt(c2.substring(3, 5), 16);
+        const b2 = parseInt(c2.substring(5, 7), 16);
+        const r = Math.round(r1 + (r2 - r1) * t);
+        const g = Math.round(g1 + (g2 - g1) * t);
+        const b = Math.round(b1 + (b2 - b1) * t);
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    } catch (e) { return c1; }
+}
+function updateToolButtons() {
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.classList.remove('bg-white/20', 'text-accent');
+        if (btn.id === `tool-${currentTool}`) {
+            btn.classList.add('bg-white/20', 'text-accent');
+        } else if (btn.id === `tool-${currentTool.replace('-obj', '')}-obj`) {
+            // Match for both simple and -obj tools
+            btn.classList.add('bg-white/20', 'text-accent');
+        }
+    });
+}
+
 // Shape Class
 class Shape {
     constructor(type, x, y, w, h, color) {
@@ -52,6 +86,50 @@ class Shape {
         this.opacity = parseFloat(document.getElementById('opacity-slider')?.value || 1);
         this.blendMode = document.getElementById('blend-mode-select')?.value || 'source-over';
         this.lineEnd = null;
+        this.interaction = null; // { trigger: 'click', targetStateId: 'happy' }
+
+        // Style Properties (Advanced)
+        this.strokeWidth = parseInt(document.getElementById('stroke-width-slider')?.value || 0);
+        this.strokeColor = document.getElementById('stroke-color-picker')?.value || '#ffffff';
+        this.cornerRadius = parseInt(document.getElementById('corner-radius-slider')?.value || 0);
+
+        // Path Property (New)
+        this.pathData = null; // SVG path string
+        this.nodes = [];      // Array of {x, y, type} for editing
+        this.isEditingPositions = false;
+    }
+
+    // Convert SVG path to nodes (simplified)
+    parsePath() {
+        if (!this.pathData) return;
+        this.nodes = [];
+        const commands = this.pathData.match(/[a-zA-Z][^a-zA-Z]*/g);
+        if (!commands) return;
+
+        commands.forEach(cmd => {
+            const type = cmd[0];
+            const args = cmd.slice(1).trim().split(/[\s,]+/).map(parseFloat);
+            if (type === 'M' || type === 'L') {
+                this.nodes.push({ type, x: args[0], y: args[1] });
+            } else if (type === 'Q') {
+                this.nodes.push({ type, cx: args[0], cy: args[1], x: args[2], y: args[3] });
+            } else if (type === 'C') {
+                this.nodes.push({ type, x1: args[0], y1: args[1], x2: args[2], y2: args[3], x: args[4], y: args[5] });
+            } else if (type === 'Z' || type === 'z') {
+                this.nodes.push({ type: 'Z' });
+            }
+        });
+    }
+
+    // Convert nodes back to pathData
+    updatePathData() {
+        this.pathData = this.nodes.map(n => {
+            if (n.type === 'M' || n.type === 'L') return `${n.type}${n.x},${n.y}`;
+            if (n.type === 'Q') return `Q${n.cx},${n.cy} ${n.x},${n.y}`;
+            if (n.type === 'C') return `C${n.x1},${n.y1} ${n.x2},${n.y2} ${n.x},${n.y}`;
+            if (n.type === 'Z') return 'Z';
+            return '';
+        }).join(' ');
     }
 
     containsPoint(px, py) {
@@ -78,6 +156,19 @@ class Shape {
             const yy = this.y + param * D;
             const dist = Math.sqrt((px - xx) ** 2 + (py - yy) ** 2);
             return dist < 5; // 5 pixel tolerance
+        } else if (this.type === 'triangle') {
+            // Point in Triangle check (Barycentric)
+            const x1 = this.x + this.width / 2, y1 = this.y;
+            const x2 = this.x, y2 = this.y + this.height;
+            const x3 = this.x + this.width, y3 = this.y + this.height;
+            const area = 0.5 * (-y2 * x3 + y1 * (-x2 + x3) + x1 * (y2 - y3) + x2 * y3);
+            const s = 1 / (2 * area) * (y1 * x3 - x1 * y3 + (y3 - y1) * px + (x1 - x3) * py);
+            const t = 1 / (2 * area) * (x1 * y2 - y1 * x2 + (y1 - y2) * px + (x2 - x1) * py);
+            return s > 0 && t > 0 && (1 - s - t) > 0;
+        } else if (this.type === 'path' && this.pathData) {
+            // Rough check (bounding box)
+            return px >= this.x && px <= this.x + this.width &&
+                py >= this.y && py <= this.y + this.height;
         }
         return false;
     }
@@ -105,6 +196,17 @@ class Shape {
         if (preserveId) {
             newShape.id = this.id; // Keep ID for tweening
         }
+        if (this.interaction) {
+            newShape.interaction = { ...this.interaction };
+        }
+
+        // Copy Styles
+        newShape.strokeWidth = this.strokeWidth;
+        newShape.strokeColor = this.strokeColor;
+        newShape.cornerRadius = this.cornerRadius;
+        newShape.pathData = this.pathData;
+        newShape.isMirrored = this.isMirrored;
+
         return newShape;
     }
 
@@ -114,8 +216,8 @@ class Shape {
         context.globalCompositeOperation = this.blendMode;
 
         context.fillStyle = this.color;
-        context.strokeStyle = this.color;
-        context.lineWidth = 2;
+        context.strokeStyle = this.strokeColor;
+        context.lineWidth = this.strokeWidth;
 
         // Apply rotation around the center of the shape
         if (this.rotation !== 0) {
@@ -125,19 +227,71 @@ class Shape {
         }
 
         if (this.type === 'rect') {
-            context.fillRect(this.x, this.y, this.width, this.height);
+            if (this.cornerRadius > 0) {
+                this.drawRoundedRect(context, this.x, this.y, this.width, this.height, this.cornerRadius);
+            } else {
+                context.fillRect(this.x, this.y, this.width, this.height);
+                if (this.strokeWidth > 0) context.strokeRect(this.x, this.y, this.width, this.height);
+            }
         } else if (this.type === 'ellipse') {
             context.beginPath();
             context.ellipse(this.x + this.width / 2, this.y + this.height / 2,
                 Math.abs(this.width / 2), Math.abs(this.height / 2), 0, 0, Math.PI * 2);
             context.fill();
+            if (this.strokeWidth > 0) context.stroke();
+        } else if (this.type === 'triangle') {
+            context.beginPath();
+            context.moveTo(this.x + this.width / 2, this.y);
+            context.lineTo(this.x, this.y + this.height);
+            context.lineTo(this.x + this.width, this.y + this.height);
+            context.closePath();
+            context.fill();
+            if (this.strokeWidth > 0) context.stroke();
+        } else if (this.type === 'path' && this.pathData) {
+            context.save();
+            const p = new Path2D(this.pathData);
+
+            // Positioning and Mirroring
+            if (this.isMirrored) {
+                context.translate(this.x + this.width, this.y);
+                context.scale(-1, 1);
+            } else {
+                context.translate(this.x, this.y);
+            }
+
+            const scaleX = this.width / 100; // Base library dimensions 100x60
+            const scaleY = this.height / 60;
+            context.scale(scaleX, scaleY);
+
+            context.fill(p);
+            if (this.strokeWidth > 0) context.stroke(p);
+            context.restore();
         } else if (this.type === 'line' && this.lineEnd) {
+            context.strokeStyle = this.color; // Line uses main color as stroke
+            context.lineWidth = Math.max(2, this.strokeWidth); // Minimum 2px for lines
             context.beginPath();
             context.moveTo(this.x, this.y);
             context.lineTo(this.lineEnd.x, this.lineEnd.y);
             context.stroke();
         }
         context.restore();
+    }
+
+    drawRoundedRect(ctx, x, y, width, height, radius) {
+        radius = Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+        ctx.fill();
+        if (this.strokeWidth > 0) ctx.stroke();
     }
 }
 
@@ -788,12 +942,22 @@ function restoreFrame(frame, jsonState) {
             shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
         }
 
-        // Restore props
-        shape.id = s.id;
+        // Restore Essential Props
+        shape.id = s.id || (Date.now() + Math.random());
         shape.rotation = s.rotation || 0;
         shape.opacity = s.opacity !== undefined ? s.opacity : 1;
         shape.blendMode = s.blendMode || 'source-over';
-        if (s.lineEnd) shape.lineEnd = s.lineEnd;
+
+        // Restore Advanced Props
+        if (s.lineEnd) shape.lineEnd = { ...s.lineEnd };
+        if (s.interaction) shape.interaction = { ...s.interaction };
+
+        // Restore Styles & Path Data
+        shape.strokeWidth = s.strokeWidth || 0;
+        shape.strokeColor = s.strokeColor || '#ffffff';
+        shape.cornerRadius = s.cornerRadius || 0;
+        shape.pathData = s.pathData || null;
+        shape.isMirrored = s.isMirrored || false;
 
         return shape;
     });
@@ -928,14 +1092,59 @@ function renderEditor() {
     const frame = frames[currentFrameIndex];
     if (!frame) return;
 
+    // 1. Draw onion skin (previous frame)
+    if (typeof onionSkinEnabled !== 'undefined' && onionSkinEnabled && currentFrameIndex > 0) {
+        const prevFrame = frames[currentFrameIndex - 1];
+        if (prevFrame) {
+            ctx.globalAlpha = onionSkinOpacity || 0.3;
+            if (prevFrame.isCacheDirty) prevFrame.updateCache();
+            ctx.drawImage(prevFrame.cacheCanvas, 0, 0);
+            if (prevFrame.shapes) {
+                prevFrame.shapes.forEach(shape => {
+                    ctx.globalAlpha = (onionSkinOpacity || 0.3) * 0.5;
+                    shape.draw(ctx);
+                });
+            }
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    // 2. Draw current frame pixels
     if (frame.isCacheDirty) frame.updateCache();
     ctx.drawImage(frame.cacheCanvas, 0, 0);
 
+    // 3. Draw shapes
     if (frame.shapes && frame.shapes.length > 0) {
-        frame.shapes.forEach(shape => shape.draw(ctx));
+        frame.shapes.forEach(shape => {
+            shape.draw(ctx);
+
+            // Draw Vector Nodes if editing
+            if (shape === selectedShape && shape.type === 'path' && shape.isEditingPositions) {
+                ctx.save();
+                shape.nodes.forEach((node, i) => {
+                    if (node.type === 'Z') return;
+                    let nx, ny;
+                    if (shape.isMirrored) {
+                        nx = (shape.x + shape.width) - (node.x * (shape.width / 100));
+                    } else {
+                        nx = shape.x + (node.x * (shape.width / 100));
+                    }
+                    ny = shape.y + (node.y * (shape.height / 60));
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#00ffff';
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                ctx.restore();
+            }
+        });
     }
 
-    // Draw selection box if shape is selected
+    // 4. Draw selection box
     if (selectedShape) {
         const bounds = selectedShape.getBounds();
         const padding = 4;
@@ -951,24 +1160,24 @@ function renderEditor() {
         );
         ctx.setLineDash([]);
 
-        // Draw resize handles (corners)
+        // Resize handles
         const handleSize = 8;
         ctx.fillStyle = '#00d2ff';
-
         const corners = [
             { x: bounds.x - padding, y: bounds.y - padding },
             { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y - padding },
             { x: bounds.x - padding, y: bounds.y + bounds.height + padding - handleSize },
             { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y + bounds.height + padding - handleSize }
         ];
-
         corners.forEach(corner => {
             ctx.fillRect(corner.x, corner.y, handleSize, handleSize);
         });
     }
 
-    // Update preview canvas
+    // 5. Update interaction & preview
+    if (typeof updateInteractionEditor === 'function') updateInteractionEditor();
     renderPreview();
+    updateFrameInfo();
 }
 
 // Canvas Actions
@@ -1042,6 +1251,26 @@ function setupEventListeners() {
     let activeHandle = null;
     let dragOffsetX = 0, dragOffsetY = 0;
     let initialShapeState = null;
+    let isEditingNode = false;
+    let activeNodeIndex = -1;
+
+    canvas.ondblclick = (e) => {
+        const coords = getCoordsFromEvent(e);
+        const frame = frames[currentFrameIndex];
+        if (!frame) return;
+
+        for (let i = frame.shapes.length - 1; i >= 0; i--) {
+            const shape = frame.shapes[i];
+            if (shape.containsPoint(coords.x, coords.y) && shape.type === 'path') {
+                selectedShape = shape;
+                shape.isEditingPositions = !shape.isEditingPositions;
+                if (shape.isEditingPositions) shape.parsePath();
+                renderEditor();
+                showToast(shape.isEditingPositions ? "Vector Edit Mode: Drag points" : "Selection Mode");
+                return;
+            }
+        }
+    };
 
     canvas.onmousedown = (e) => {
         if (!frames[currentFrameIndex]) return;
@@ -1054,7 +1283,25 @@ function setupEventListeners() {
         if (currentTool === 'select') {
             const frame = frames[currentFrameIndex];
 
-            // 1. Check Resize Handles first (if a shape is already selected)
+            if (selectedShape && selectedShape.isEditingPositions) {
+                // Check Node Hits
+                const nodeSize = 6;
+                const hitIdx = selectedShape.nodes.findIndex(n => {
+                    if (n.type === 'Z') return false;
+                    const nx = selectedShape.x + (n.x * (selectedShape.width / 100));
+                    const ny = selectedShape.y + (n.y * (selectedShape.height / 60));
+                    return Math.abs(coords.x - nx) < nodeSize && Math.abs(coords.y - ny) < nodeSize;
+                });
+
+                if (hitIdx > -1) {
+                    isEditingNode = true;
+                    activeNodeIndex = hitIdx;
+                    saveUndo();
+                    return;
+                }
+            }
+
+            // 1. Check Resize Handles first...
             if (selectedShape) {
                 const handle = getResizeHandle(coords.x, coords.y, selectedShape);
                 if (handle) {
@@ -1163,6 +1410,17 @@ function setupEventListeners() {
             return;
         }
 
+        // Vector Node Drag
+        if (isEditingNode && selectedShape && activeNodeIndex > -1) {
+            const node = selectedShape.nodes[activeNodeIndex];
+            // Update node relative to 100x60 base
+            node.x = (coords.x - selectedShape.x) / (selectedShape.width / 100);
+            node.y = (coords.y - selectedShape.y) / (selectedShape.height / 60);
+            selectedShape.updatePathData();
+            renderEditor();
+            return;
+        }
+
         // Move Shape
         if (isDraggingShape && selectedShape) {
             selectedShape.x = coords.x - dragOffsetX;
@@ -1199,6 +1457,13 @@ function setupEventListeners() {
                 ctx.beginPath();
                 ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
                 ctx.stroke();
+            } else if (currentTool === 'triangle-obj') {
+                ctx.beginPath();
+                ctx.moveTo(startX + (coords.x - startX) / 2, startY);
+                ctx.lineTo(startX, coords.y);
+                ctx.lineTo(coords.x, coords.y);
+                ctx.closePath();
+                ctx.stroke();
             }
             ctx.restore();
             // Sync preview with current editor state (including the ghost shape)
@@ -1224,6 +1489,13 @@ function setupEventListeners() {
     canvas.onmouseup = (e) => {
         if (!frames[currentFrameIndex]) return;
         const coords = getCoordsFromEvent(e);
+
+        if (isEditingNode) {
+            isEditingNode = false;
+            activeNodeIndex = -1;
+            renderTimeline();
+            return;
+        }
 
         if (isResizingShape) {
             isResizingShape = false;
@@ -1291,6 +1563,10 @@ function setupEventListeners() {
                     newShape.height = Math.abs(coords.y - startY);
                     newShape.x = Math.min(startX, coords.x);
                     newShape.y = Math.min(startY, coords.y);
+                } else if (currentTool === 'triangle-obj') {
+                    if (w > 2 || h > 2) {
+                        newShape = new Shape('triangle', x, y, w, h, currentColor);
+                    }
                 } else if (currentTool === 'text-obj') {
                     // Text is special: Click to place, then prompt
                     const text = prompt("Enter text:", "TEXT");
@@ -1304,17 +1580,21 @@ function setupEventListeners() {
                     frame.shapes.push(newShape);
 
                     if (isSymmetryEnabled) {
-                        const mirroredShape = newShape.clone();
-                        if (newShape.type === 'line') {
-                            mirroredShape.x = GRID_WIDTH - newShape.x;
-                            mirroredShape.lineEnd.x = GRID_WIDTH - newShape.lineEnd.x;
+                        const mirrored = newShape.clone();
+                        mirrored.id = Date.now() + Math.random();
+                        if (newShape.type === 'line' && newShape.lineEnd) {
+                            mirrored.x = GRID_WIDTH - newShape.x;
+                            mirrored.lineEnd.x = GRID_WIDTH - newShape.lineEnd.x;
                         } else {
-                            mirroredShape.x = GRID_WIDTH - newShape.x - newShape.width;
+                            mirrored.x = GRID_WIDTH - newShape.x - newShape.width;
                         }
-                        frame.shapes.push(mirroredShape);
+                        frame.shapes.push(mirrored);
                     }
 
                     selectedShape = newShape; // Auto-select new shape
+                    currentTool = 'select'; // Switch to select to move/edit
+                    updateToolButtons();
+                    renderEditor();
                     updateLayersPanel();
                 }
             }
@@ -1879,11 +2159,16 @@ function renderPreview(frameIndex, interpolation = null) {
                     width: lerp(s1.width, s2.width, t),
                     height: lerp(s1.height, s2.height, t),
                     rotation: lerp(s1.rotation || 0, s2.rotation || 0, t),
-                    color: s1.color, // Color lerp is complex, stick to s1 for now
+                    color: s1.color,
+                    strokeColor: s1.strokeColor || s1.color,
+                    strokeWidth: lerp(s1.strokeWidth || 0, s2.strokeWidth || 0, t),
+                    cornerRadius: lerp(s1.cornerRadius || 0, s2.cornerRadius || 0, t),
                     opacity: lerp(s1.opacity !== undefined ? s1.opacity : 1, s2.opacity !== undefined ? s2.opacity : 1, t),
                     blendMode: s1.blendMode,
                     text: s1.text,
                     fontSize: s1.fontSize,
+                    pathData: s1.pathData,
+                    isMirrored: s1.isMirrored,
                     lineEnd: (s1.type === 'line' && s1.lineEnd && s2.lineEnd) ? {
                         x: lerp(s1.lineEnd.x, s2.lineEnd.x, t),
                         y: lerp(s1.lineEnd.y, s2.lineEnd.y, t)
@@ -1901,9 +2186,9 @@ function renderPreview(frameIndex, interpolation = null) {
                 pCtx.save();
                 pCtx.globalAlpha = props.opacity !== undefined ? props.opacity : 1;
                 pCtx.globalCompositeOperation = props.blendMode || 'source-over';
-                pCtx.fillStyle = props.color;
-                pCtx.strokeStyle = props.color;
-                pCtx.lineWidth = 2;
+                pCtx.fillStyle = props.color || '#ffffff';
+                pCtx.strokeStyle = props.strokeColor || props.color || '#ffffff';
+                pCtx.lineWidth = props.strokeWidth || 0;
 
                 // Apply rotation
                 if (props.rotation) {
@@ -1921,6 +2206,29 @@ function renderPreview(frameIndex, interpolation = null) {
                     pCtx.ellipse(props.x + props.width / 2, props.y + props.height / 2,
                         Math.abs(props.width / 2), Math.abs(props.height / 2), 0, 0, Math.PI * 2);
                     pCtx.fill();
+                } else if (props.type === 'triangle') {
+                    pCtx.beginPath();
+                    pCtx.moveTo(props.x + props.width / 2, props.y);
+                    pCtx.lineTo(props.x, props.y + props.height);
+                    pCtx.lineTo(props.x + props.width, props.y + props.height);
+                    pCtx.closePath();
+                    pCtx.fill();
+                } else if (props.type === 'path' && props.pathData) {
+                    pCtx.save();
+                    const p = new Path2D(props.pathData);
+                    if (props.isMirrored) {
+                        pCtx.translate(props.x + props.width, props.y);
+                        pCtx.scale(-1, 1);
+                    } else {
+                        pCtx.translate(props.x, props.y);
+                    }
+                    pCtx.scale(props.width / 100, props.height / 60);
+                    pCtx.fill(p);
+                    if (props.strokeWidth > 0) {
+                        pCtx.lineWidth = props.strokeWidth / (props.width / 100);
+                        pCtx.stroke(p);
+                    }
+                    pCtx.restore();
                 } else if (props.type === 'line' && props.lineEnd) {
                     pCtx.beginPath(); pCtx.moveTo(props.x, props.y); pCtx.lineTo(props.lineEnd.x, props.lineEnd.y); pCtx.stroke();
                 } else if (props.type === 'text') {
@@ -2095,163 +2403,165 @@ async function exportToC() {
     showToast(`✅ Exported ${name}.c (Bitmap)`);
 }
 
-// ======== NATIVE LVGL EXPORT ========
+// ======== NATIVE LVGL EXPORT (STATE MACHINE SUPPORT) ========
 async function exportToLVGLNative() {
-    let name = document.getElementById('anim-name')?.value || 'my_anim';
-    name = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    let baseName = document.getElementById('anim-name')?.value || 'my_anim';
+    baseName = baseName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+
+    // Cache current frames to active state
+    if (activeStateId) {
+        const current = projectStates.find(s => s.id === activeStateId);
+        if (current) current.frames = [...frames];
+    }
 
     let cContent = `/**
- * @file ${name}_native.c
- * @brief Auto-generated Native LVGL animation from Robot Face Studio
+ * @file ${baseName}_native.c
+ * @brief Auto-generated Native LVGL state machine from Robot Face Studio
  */
 #include "lvgl/lvgl.h"
 
-// Helper to set bg opacity for animations
-static void _lv_obj_set_bg_opa_anim(void * obj, int32_t v) {
-    lv_obj_set_style_bg_opa(obj, v, 0);
+// Forward declarations
+static lv_obj_t * face_container = NULL;
+void ${baseName}_switch_state(const char * state_id);
+
+// Interaction callback
+static void interaction_cb(lv_event_t * e) {
+    const char * next_state = (const char *)lv_event_get_user_data(e);
+    if (next_state) {
+        ${baseName}_switch_state(next_state);
+    }
 }
 
-void create_${name}_native(lv_obj_t * parent) {
-    // 1. Setup Layer Background (Optional)
-    // lv_obj_set_style_bg_color(parent, lv_color_hex(0x000000), 0);
-    // lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+// Helper to set bg opacity for animations
+static void _lv_obj_set_bg_opa_anim(void * obj, int32_t v) {
+    lv_obj_set_style_bg_opa((lv_obj_t*)obj, v, 0);
+}
 
 `;
 
-    // Identify all unique shapes across all frames
-    const allShapeIds = new Set();
-    frames.forEach(f => f.shapes.forEach(s => allShapeIds.add(s.id)));
+    // Generate specific creation functions for each state
+    projectStates.forEach(state => {
+        cContent += `// --- State: ${state.name} ---\n`;
+        cContent += `static void create_state_${state.id}(lv_obj_t * parent) {\n`;
 
-    // Create map of ID to variable name
-    const idToVar = {};
-    let shapeIdx = 0;
-    allShapeIds.forEach(id => {
-        idToVar[id] = `obj_${shapeIdx++}`;
-        cContent += `    lv_obj_t * ${idToVar[id]} = NULL;\n`;
-    });
-
-    cContent += `\n`;
-
-    // 2. Initial Object Creation
-    allShapeIds.forEach(id => {
-        const varName = idToVar[id];
-        // Find first appearance
-        let firstFrame = -1;
-        for (let i = 0; i < frames.length; i++) {
-            if (frames[i].shapes.find(s => s.id === id)) {
-                firstFrame = i; break;
-            }
+        const stateFrames = state.frames;
+        if (!stateFrames || stateFrames.length === 0) {
+            cContent += `}\n\n`;
+            return;
         }
 
-        if (firstFrame === -1) return;
-        const s = frames[firstFrame].shapes.find(sh => sh.id === id);
+        // Identify unique shapes in THIS state
+        const stateShapeIds = new Set();
+        stateFrames.forEach(f => f.shapes.forEach(s => stateShapeIds.add(s.id)));
 
-        if (s.type === 'rect' || s.type === 'ellipse' || s.type === 'text') {
+        const idToVar = {};
+        let shapeIdx = 0;
+        stateShapeIds.forEach(id => {
+            idToVar[id] = `obj_${shapeIdx++}`;
+            cContent += `    lv_obj_t * ${idToVar[id]} = NULL;\n`;
+        });
+
+        stateShapeIds.forEach(id => {
+            const varName = idToVar[id];
+            let firstFrameIdx = -1;
+            for (let i = 0; i < stateFrames.length; i++) {
+                if (stateFrames[i].shapes.find(s => s.id === id)) {
+                    firstFrameIdx = i; break;
+                }
+            }
+            if (firstFrameIdx === -1) return;
+            const s = stateFrames[firstFrameIdx].shapes.find(sh => sh.id === id);
+
             if (s.type === 'text') {
                 cContent += `    ${varName} = lv_label_create(parent);\n`;
                 cContent += `    lv_label_set_text(${varName}, "${s.text.replace(/"/g, '\\"')}");\n`;
             } else {
                 cContent += `    ${varName} = lv_obj_create(parent);\n`;
                 cContent += `    lv_obj_set_size(${varName}, ${Math.round(s.width)}, ${Math.round(s.height)});\n`;
+
                 if (s.type === 'ellipse') {
                     cContent += `    lv_obj_set_style_radius(${varName}, LV_RADIUS_CIRCLE, 0);\n`;
+                } else if (s.cornerRadius > 0) {
+                    cContent += `    lv_obj_set_style_radius(${varName}, ${Math.round(s.cornerRadius)}, 0);\n`;
                 } else {
                     cContent += `    lv_obj_set_style_radius(${varName}, 0, 0);\n`;
                 }
+
                 cContent += `    lv_obj_set_style_bg_color(${varName}, lv_color_hex(0x${s.color.replace('#', '')}), 0);\n`;
-                cContent += `    lv_obj_set_style_border_width(${varName}, 0, 0);\n`;
+
+                if (s.strokeWidth > 0) {
+                    cContent += `    lv_obj_set_style_border_width(${varName}, ${Math.round(s.strokeWidth)}, 0);\n`;
+                    cContent += `    lv_obj_set_style_border_color(${varName}, lv_color_hex(0x${s.strokeColor.replace('#', '')}), 0);\n`;
+                } else {
+                    cContent += `    lv_obj_set_style_border_width(${varName}, 0, 0);\n`;
+                }
             }
 
             cContent += `    lv_obj_set_pos(${varName}, ${Math.round(s.x)}, ${Math.round(s.y)});\n`;
             cContent += `    lv_obj_set_style_bg_opa(${varName}, ${Math.round(s.opacity * 255)}, 0);\n`;
+            if (firstFrameIdx > 0) cContent += `    lv_obj_add_flag(${varName}, LV_OBJ_FLAG_HIDDEN);\n`;
 
-            // Hide if not in first frame
-            if (firstFrame > 0) {
-                cContent += `    lv_obj_add_flag(${varName}, LV_OBJ_FLAG_HIDDEN);\n`;
+            if (s.interaction && s.interaction.trigger === 'click') {
+                cContent += `    lv_obj_add_flag(${varName}, LV_OBJ_FLAG_CLICKABLE);\n`;
+                cContent += `    lv_obj_add_event_cb(${varName}, interaction_cb, LV_EVENT_CLICKED, (void*)"${s.interaction.targetStateId}");\n`;
             }
+        });
+
+        // Animations for this state
+        const easingMap = { 'linear': 'lv_anim_path_linear', 'ease-in': 'lv_anim_path_ease_in', 'ease-out': 'lv_anim_path_ease_out', 'ease-in-out': 'lv_anim_path_ease_in_out', 'overshoot': 'lv_anim_path_overshoot', 'bounce': 'lv_anim_path_bounce' };
+        const globalEasing = document.getElementById('easing-mode')?.value || 'linear';
+        const lvglEasing = easingMap[globalEasing] || 'lv_anim_path_linear';
+
+        let timeAccum = 0;
+        for (let i = 0; i < stateFrames.length - 1; i++) {
+            const f1 = stateFrames[i];
+            const f2 = stateFrames[i + 1];
+            f1.shapes.forEach(s1 => {
+                const s2 = f2.shapes.find(s => s.id === s1.id);
+                if (s2) {
+                    const varName = idToVar[s1.id];
+                    const props = [
+                        { k: 'x', cb: 'lv_obj_set_x' },
+                        { k: 'y', cb: 'lv_obj_set_y' },
+                        { k: 'width', cb: 'lv_obj_set_width' },
+                        { k: 'height', cb: 'lv_obj_set_height' },
+                        { k: 'opacity', cb: '_lv_obj_set_bg_opa_anim', s: 255 },
+                        { k: 'strokeWidth', cb: 'lv_obj_set_style_border_width' }
+                    ];
+                    props.forEach(p => {
+                        const v1 = p.s ? s1[p.k] * p.s : s1[p.k];
+                        const v2 = p.s ? s2[p.k] * p.s : s2[p.k];
+                        if (Math.abs(v1 - v2) > 0.1) {
+                            cContent += `    { lv_anim_t a; lv_anim_init(&a); lv_anim_set_var(&a, ${varName}); lv_anim_set_values(&a, ${Math.round(v1)}, ${Math.round(v2)}); lv_anim_set_time(&a, ${f1.duration}); lv_anim_set_delay(&a, ${timeAccum}); lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)${p.cb}); lv_anim_set_path_cb(&a, ${lvglEasing}); lv_anim_start(&a); }\n`;
+                        }
+                    });
+                }
+            });
+            timeAccum += f1.duration;
         }
+        cContent += `}\n\n`;
     });
 
-    // 3. Generate Animations
-    const easingMap = {
-        'linear': 'lv_anim_path_linear',
-        'ease-in': 'lv_anim_path_ease_in',
-        'ease-out': 'lv_anim_path_ease_out',
-        'ease-in-out': 'lv_anim_path_ease_in_out',
-        'overshoot': 'lv_anim_path_overshoot',
-        'bounce': 'lv_anim_path_bounce'
-    };
-    const globalEasing = document.getElementById('easing-mode')?.value || 'linear';
-    const lvglEasing = easingMap[globalEasing] || 'lv_anim_path_linear';
+    // Central Controller
+    cContent += `void ${baseName}_switch_state(const char * state_id) {\n`;
+    cContent += `    if (!face_container) return;\n`;
+    cContent += `    lv_obj_clean(face_container);\n`;
+    projectStates.forEach((state, i) => {
+        const cond = i === 0 ? `if` : `else if`;
+        cContent += `    ${cond} (strcmp(state_id, "${state.id}") == 0) create_state_${state.id}(face_container);\n`;
+    });
+    cContent += `}\n\n`;
 
-    let timeAccum = 0;
-    for (let i = 0; i < frames.length - 1; i++) {
-        const f1 = frames[i];
-        const f2 = frames[i + 1];
-        const duration = f1.duration;
-
-        f1.shapes.forEach(s1 => {
-            const s2 = f2.shapes.find(s => s.id === s1.id);
-            if (s2) {
-                const varName = idToVar[s1.id];
-                const props = [
-                    { key: 'x', cb: 'lv_obj_set_x' },
-                    { key: 'y', cb: 'lv_obj_set_y' },
-                    { key: 'width', cb: 'lv_obj_set_width' },
-                    { key: 'height', cb: 'lv_obj_set_height' },
-                    { key: 'opacity', cb: '_lv_obj_set_bg_opa_anim', scale: 255 }
-                ];
-
-                props.forEach(p => {
-                    if (s1.type === 'text' && (p.key === 'width' || p.key === 'height')) return;
-
-                    const v1 = p.scale ? s1[p.key] * p.scale : s1[p.key];
-                    const v2 = p.scale ? s2[p.key] * p.scale : s2[p.key];
-
-                    if (Math.abs(v1 - v2) > 0.1) {
-                        cContent += `    {\n`;
-                        cContent += `        lv_anim_t a;\n`;
-                        cContent += `        lv_anim_init(&a);\n`;
-                        cContent += `        lv_anim_set_var(&a, ${varName});\n`;
-                        cContent += `        lv_anim_set_values(&a, ${Math.round(v1)}, ${Math.round(v2)});\n`;
-                        cContent += `        lv_anim_set_time(&a, ${duration});\n`;
-                        cContent += `        lv_anim_set_delay(&a, ${timeAccum});\n`;
-                        cContent += `        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)${p.cb});\n`;
-                        cContent += `        lv_anim_set_path_cb(&a, ${lvglEasing});\n`;
-                        cContent += `        lv_anim_start(&a);\n`;
-                        cContent += `    }\n`;
-                    }
-                });
-            }
-        });
-
-        // Handle appearing/disappearing objects (Show/Hide)
-        f2.shapes.forEach(s2 => {
-            if (!f1.shapes.find(s => s.id === s2.id)) {
-                // Object appears at f2
-                const varName = idToVar[s2.id];
-                cContent += `    // Show ${varName} at ${timeAccum + duration}ms\n`;
-                // Simple delay to show
-                cContent += `    {\n`;
-                cContent += `        lv_anim_t a;\n`;
-                cContent += `        lv_anim_init(&a);\n`;
-                cContent += `        lv_anim_set_var(&a, ${varName});\n`;
-                cContent += `        lv_anim_set_values(&a, 0, 1);\n`;
-                cContent += `        lv_anim_set_time(&a, 1);\n`;
-                cContent += `        lv_anim_set_delay(&a, ${timeAccum + duration});\n`;
-                cContent += `        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_clear_flag);\n`;
-                cContent += `        // Note: LV_OBJ_FLAG_HIDDEN is usually what we clear\n`;
-                cContent += `    }\n`;
-            }
-        });
-
-        timeAccum += duration;
-    }
-
+    cContent += `void init_${baseName}(lv_obj_t * parent) {\n`;
+    cContent += `    face_container = lv_obj_create(parent);\n`;
+    cContent += `    lv_obj_set_size(face_container, LV_PCT(100), LV_PCT(100));\n`;
+    cContent += `    lv_obj_set_style_bg_opa(face_container, 0, 0);\n`;
+    cContent += `    lv_obj_set_style_border_width(face_container, 0, 0);\n`;
+    cContent += `    ${baseName}_switch_state("${activeStateId || projectStates[0].id}");\n`;
     cContent += `}\n`;
 
-    await saveFile(cContent, `${name}_native.c`, 'text/x-c');
-    showToast(`✅ Exported ${name}_native.c`);
+    await saveFile(cContent, `${baseName}_native.c`, 'text/x-c');
+    showToast(`✅ Exported State Machine: ${baseName}_native.c`);
 }
 
 // ======== SEND TO ROBOT (BRIDGE) ========
@@ -2260,28 +2570,39 @@ async function sendToRobot() {
     // Sanitize
     name = name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
 
-    // Prepare Data
+    // Save current frames to active state
+    if (activeStateId) {
+        const current = projectStates.find(s => s.id === activeStateId);
+        if (current) current.frames = [...frames];
+    }
+
     const data = {
         name: name,
         width: GRID_WIDTH,
         height: GRID_HEIGHT,
         fps: parseInt(document.getElementById('fps-range')?.value || 12),
-        frames: frames.map(f => ({
-            pixels: f.pixels.map((c, i) => c ? { i, c } : null).filter(p => p),
-            duration: f.duration,
-            shapes: f.shapes ? f.shapes.map(s => ({
-                type: s.type,
-                x: s.x,
-                y: s.y,
-                width: s.width,
-                height: s.height,
-                color: s.color,
-                opacity: s.opacity,
-                blendMode: s.blendMode,
-                rotation: s.rotation,
-                lineEnd: s.lineEnd,
-                id: s.id
-            })) : []
+        activeStateId: activeStateId,
+        states: projectStates.map(state => ({
+            id: state.id,
+            name: state.name,
+            frames: state.frames.map(f => ({
+                pixels: f.pixels.map((c, i) => c ? { i, c } : null).filter(p => p),
+                duration: f.duration,
+                shapes: f.shapes ? f.shapes.map(s => ({
+                    type: s.type,
+                    x: s.x,
+                    y: s.y,
+                    width: s.width,
+                    height: s.height,
+                    color: s.color,
+                    opacity: s.opacity,
+                    blendMode: s.blendMode,
+                    rotation: s.rotation,
+                    lineEnd: s.lineEnd,
+                    id: s.id,
+                    interaction: s.interaction
+                })) : []
+            }))
         }))
     };
 
@@ -2458,36 +2779,49 @@ function resizeCanvas(newWidth, newHeight) {
     showToast(`Canvas resized to ${GRID_WIDTH}x${GRID_HEIGHT}`);
 }
 
-// Export to JSON
 async function exportToJSON() {
-    // Get animation name from input field
     let name = document.getElementById('anim-name')?.value || 'animation';
-    // Sanitize name
     name = name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    if (!name || name.length === 0) name = 'animation';
+
+    // Save current frames to the active state before exporting
+    if (activeStateId) {
+        const current = projectStates.find(s => s.id === activeStateId);
+        if (current) current.frames = [...frames];
+    }
 
     const data = {
-        version: "1.0",
+        version: "1.1",
         width: GRID_WIDTH,
         height: GRID_HEIGHT,
         fps: parseInt(document.getElementById('fps-range')?.value || 12),
         easingMode: document.getElementById('easing-mode')?.value || 'linear',
-        frames: frames.map((frame, index) => ({
-            index,
-            duration: frame.duration,
-            pixels: frame.pixels.map((p, i) => p ? { i, c: p } : null).filter(Boolean),
-            shapes: frame.shapes.map(s => ({
-                type: s.type,
-                x: s.x,
-                y: s.y,
-                width: s.width,
-                height: s.height,
-                color: s.color,
-                opacity: s.opacity,
-                blendMode: s.blendMode,
-                rotation: s.rotation,
-                lineEnd: s.lineEnd,
-                id: s.id
+        activeStateId: activeStateId,
+        states: projectStates.map(state => ({
+            id: state.id,
+            name: state.name,
+            frames: state.frames.map((frame, index) => ({
+                index,
+                duration: frame.duration,
+                pixels: frame.pixels.map((p, i) => p ? { i, c: p } : null).filter(Boolean),
+                shapes: frame.shapes.map(s => ({
+                    type: s.type,
+                    x: s.x,
+                    y: s.y,
+                    width: s.width,
+                    height: s.height,
+                    color: s.color,
+                    opacity: s.opacity,
+                    blendMode: s.blendMode,
+                    rotation: s.rotation,
+                    lineEnd: s.lineEnd,
+                    id: s.id,
+                    interaction: s.interaction,
+                    strokeWidth: s.strokeWidth,
+                    strokeColor: s.strokeColor,
+                    cornerRadius: s.cornerRadius,
+                    pathData: s.pathData,
+                    isMirrored: s.isMirrored
+                }))
             }))
         }))
     };
@@ -2496,7 +2830,6 @@ async function exportToJSON() {
     await saveFile(jsonContent, `${name}.json`, 'application/json');
 }
 
-// Import from JSON
 async function importFromJSON() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -2510,59 +2843,72 @@ async function importFromJSON() {
             const text = await file.text();
             const data = JSON.parse(text);
 
-            if (!data.frames || !Array.isArray(data.frames)) {
-                showToast('Invalid animation file');
-                return;
-            }
-
-            // Apply dimensions
             if (data.width && data.height) {
                 resizeCanvas(data.width, data.height);
             }
 
-            // Load frames
-            frames = [];
-            data.frames.forEach(frameData => {
-                const frame = new Frame();
-                frame.duration = frameData.duration || 100;
-
-                // Load pixels
-                if (frameData.pixels) {
-                    frameData.pixels.forEach(p => {
-                        if (p && p.i !== undefined && p.c) {
-                            frame.pixels[p.i] = p.c;
+            if (data.states && Array.isArray(data.states)) {
+                // v1.1 format with states
+                projectStates = data.states.map(stateData => ({
+                    id: stateData.id,
+                    name: stateData.name,
+                    frames: stateData.frames.map(frameData => {
+                        const frame = new Frame();
+                        frame.duration = frameData.duration || 100;
+                        if (frameData.pixels) {
+                            frameData.pixels.forEach(p => {
+                                if (p && p.i !== undefined && p.c) frame.pixels[p.i] = p.c;
+                            });
                         }
-                    });
-                }
-
-                // Load shapes
-                if (frameData.shapes) {
-                    frame.shapes = frameData.shapes.map(s => {
-                        const shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
-                        shape.opacity = s.opacity !== undefined ? s.opacity : 1;
-                        shape.blendMode = s.blendMode || 'source-over';
-                        shape.rotation = s.rotation || 0;
-                        shape.id = s.id || (Date.now() + Math.random());
-                        if (s.lineEnd) shape.lineEnd = { ...s.lineEnd };
-                        return shape;
-                    });
-                }
-
-                frames.push(frame);
-            });
-
-            if (frames.length === 0) {
-                frames = [new Frame()];
+                        if (frameData.shapes) {
+                            frame.shapes = frameData.shapes.map(s => {
+                                const shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
+                                shape.opacity = s.opacity ?? 1;
+                                shape.blendMode = s.blendMode || 'source-over';
+                                shape.rotation = s.rotation || 0;
+                                shape.id = s.id || (Date.now() + Math.random());
+                                if (s.lineEnd) shape.lineEnd = { ...s.lineEnd };
+                                if (s.interaction) shape.interaction = { ...s.interaction };
+                                shape.strokeWidth = s.strokeWidth || 0;
+                                shape.strokeColor = s.strokeColor || '#ffffff';
+                                shape.cornerRadius = s.cornerRadius || 0;
+                                return shape;
+                            });
+                        }
+                        return frame;
+                    })
+                }));
+                activeStateId = data.activeStateId || projectStates[0].id;
+            } else if (data.frames) {
+                // Legacy v1.0 format
+                const framesList = data.frames.map(frameData => {
+                    const frame = new Frame();
+                    frame.duration = frameData.duration || 100;
+                    if (frameData.pixels) {
+                        frameData.pixels.forEach(p => {
+                            if (p && p.i !== undefined && p.c) frame.pixels[p.i] = p.c;
+                        });
+                    }
+                    if (frameData.shapes) {
+                        frame.shapes = frameData.shapes.map(s => {
+                            const shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
+                            shape.opacity = s.opacity ?? 1;
+                            shape.rotation = s.rotation || 0;
+                            shape.id = s.id || (Date.now() + Math.random());
+                            if (s.lineEnd) shape.lineEnd = { ...s.lineEnd };
+                            if (s.pathData) shape.pathData = s.pathData;
+                            if (s.isMirrored) shape.isMirrored = s.isMirrored;
+                            return shape;
+                        });
+                    }
+                    return frame;
+                });
+                projectStates = [{ id: 'idle', name: 'Idle', frames: framesList }];
+                activeStateId = 'idle';
             }
 
-            currentFrameIndex = 0;
-            renderTimeline();
-            renderEditor();
-            renderPreview();
-            updateFrameInfo();
-            updateLayersPanel();
-
-            showToast(`Loaded ${frames.length} frames`);
+            switchState(activeStateId);
+            showToast(`Loaded ${projectStates.length} states`);
         } catch (err) {
             console.error(err);
             showToast('Failed to load file');
@@ -2631,8 +2977,7 @@ function toggleOnionSkin(enabled) {
     renderEditor();
 }
 
-// Enhanced renderEditor with Onion Skinning
-const originalRenderEditor = renderEditor;
+
 
 // Override renderEditor to add onion skinning
 function renderEditorWithOnion() {
@@ -2670,7 +3015,30 @@ function renderEditorWithOnion() {
 
     // Draw shapes
     if (frame.shapes && frame.shapes.length > 0) {
-        frame.shapes.forEach(shape => shape.draw(ctx));
+        frame.shapes.forEach(shape => {
+            shape.draw(ctx);
+
+            // Draw Vector Nodes if editing
+            if (shape === selectedShape && shape.type === 'path' && shape.isEditingPositions) {
+                ctx.fillStyle = '#00d2ff';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+
+                shape.nodes.forEach((node, i) => {
+                    if (node.type === 'Z') return;
+
+                    // Convert normalized 100x60 Library coords to actual shape units
+                    // (Actually nodes are already absolute relative to shape origin)
+                    const nx = shape.x + (node.x * (shape.width / 100));
+                    const ny = shape.y + (node.y * (shape.height / 60));
+
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                });
+            }
+        });
     }
 
     // Draw selection box if shape is selected
@@ -2715,125 +3083,6 @@ function renderEditorWithOnion() {
 // Start
 init();
 
-// ======== ROBUST PREVIEW RENDERER ========
-// Overriding any previous broken implementation
-function renderPreview(frameIndex, interpolation = null) {
-    try {
-        if (frameIndex === undefined) frameIndex = currentFrameIndex;
-        const frame = frames[frameIndex];
-        if (!frame) return;
-
-        const pCanvas = document.getElementById('preview-canvas');
-        if (!pCanvas) return;
-        const pCtx = pCanvas.getContext('2d');
-        if (!pCtx) return;
-
-        pCanvas.width = GRID_WIDTH;
-        pCanvas.height = GRID_HEIGHT;
-
-        // 1. Clear text/bg
-        pCtx.fillStyle = '#000000';
-        pCtx.fillRect(0, 0, pCanvas.width, pCanvas.height);
-
-        // 2. Render Pixels
-        if (frame.isCacheDirty) frame.updateCache();
-        pCtx.drawImage(frame.cacheCanvas, 0, 0);
-
-        // 3. Helper to draw any shape properties
-        const drawPreviewShape = (ctx, props) => {
-            if (!props) return;
-            ctx.save();
-            ctx.globalAlpha = (props.opacity !== undefined && !isNaN(props.opacity)) ? props.opacity : 1;
-            ctx.globalCompositeOperation = props.blendMode || 'source-over';
-            ctx.fillStyle = props.color || '#FFFFFF';
-            ctx.strokeStyle = props.color || '#FFFFFF';
-            ctx.lineWidth = 2;
-
-            const x = props.x || 0;
-            const y = props.y || 0;
-            const w = props.width || 0;
-            const h = props.height || 0;
-            const rotation = props.rotation || 0;
-
-            if (rotation !== 0) {
-                const cx = x + w / 2;
-                const cy = y + h / 2;
-                ctx.translate(cx, cy);
-                ctx.rotate((rotation * Math.PI) / 180);
-                ctx.translate(-cx, -cy);
-            }
-
-            if (props.type === 'rect') {
-                ctx.fillRect(x, y, w, h);
-            } else if (props.type === 'ellipse') {
-                ctx.beginPath();
-                ctx.ellipse(x + w / 2, y + h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
-                ctx.fill();
-            } else if (props.type === 'line' && props.lineEnd) {
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(props.lineEnd.x, props.lineEnd.y);
-                ctx.stroke();
-            } else if (props.type === 'text') {
-                ctx.font = `${props.fontSize || 16}px Inter, sans-serif`;
-                ctx.fillText(props.text || '', x, y + (props.fontSize || 16));
-            }
-            ctx.restore();
-        };
-
-        // 4. Render Shapes (Interpolated if needed)
-        if (frame.shapes && frame.shapes.length > 0) {
-            const nextFrame = interpolation ? interpolation.nextFrame : null;
-            let t = interpolation ? interpolation.t : 0;
-
-            // Apply Easing if not already applied in the caller
-            if (interpolation && !interpolation.eased) {
-                const easingMode = document.getElementById('easing-mode')?.value || 'linear';
-                t = applyEasing(t, easingMode);
-            }
-
-            const allIds = new Set([
-                ...frame.shapes.map(s => s.id),
-                ...(nextFrame ? nextFrame.shapes.map(s => s.id) : [])
-            ]);
-
-            allIds.forEach(id => {
-                const s1 = frame.shapes.find(s => s.id === id);
-                const s2 = nextFrame ? nextFrame.shapes.find(s => s.id === id) : null;
-
-                let props = null;
-
-                if (s1 && s2 && s1.type === s2.type) {
-                    props = {
-                        type: s1.type,
-                        x: lerp(s1.x, s2.x, t),
-                        y: lerp(s1.y, s2.y, t),
-                        width: lerp(s1.width, s2.width, t),
-                        height: lerp(s1.height, s2.height, t),
-                        rotation: lerp(s1.rotation || 0, s2.rotation || 0, t),
-                        color: s1.color,
-                        opacity: lerp(s1.opacity !== undefined ? s1.opacity : 1, s2.opacity !== undefined ? s2.opacity : 1, t),
-                        blendMode: s1.blendMode,
-                        text: s1.text,
-                        fontSize: s1.fontSize,
-                        lineEnd: (s1.type === 'line' && s1.lineEnd && s2.lineEnd) ? {
-                            x: lerp(s1.lineEnd.x, s2.lineEnd.x, t),
-                            y: lerp(s1.lineEnd.y, s2.lineEnd.y, t)
-                        } : null
-                    };
-                } else if (s1) {
-                    props = { ...s1, opacity: s1.opacity * (1 - t) };
-                } else if (s2 && t > 0) {
-                    props = { ...s2, opacity: s2.opacity * t };
-                }
-
-                if (props) drawPreviewShape(pCtx, props);
-            });
-        }
-    } catch (err) {
-        console.error("RenderPreview Error:", err);
-    }
-}
 
 
 // =========================================
@@ -3096,3 +3345,333 @@ function updateToolButtons() {
     document.getElementById(toolId)?.classList.add('active');
 }
 
+
+// ======== INTERACTION & STATE MACHINE ========
+
+function updateStatesPanel() {
+    const listEl = document.getElementById('states-list');
+    if (!listEl) return;
+
+    if (projectStates.length === 0) {
+        listEl.innerHTML = `
+            <div class="text-[10px] text-zinc-600 font-bold text-center py-4 bg-black/20 rounded-lg border border-white/5 border-dashed">
+                No states defined
+            </div>`;
+        return;
+    }
+
+    listEl.innerHTML = projectStates.map(state => {
+        const isActive = activeStateId === state.id;
+        return `
+            <div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${isActive ? 'bg-accent/20 border border-accent/20' : 'bg-white/5 hover:bg-white/10'}" 
+                 onclick="switchState('${state.id}')">
+                <div class="w-1.5 h-1.5 rounded-full ${isActive ? 'bg-accent animate-pulse' : 'bg-zinc-600'}"></div>
+                <span class="text-[11px] font-bold flex-1 ${isActive ? 'text-accent' : 'text-zinc-400'}">${state.name}</span>
+                <button onclick="event.stopPropagation(); deleteState('${state.id}')" class="p-1.5 text-zinc-600 hover:text-red-500 transition-colors">
+                    <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    if (window.lucide) lucide.createIcons();
+
+    // Update the next-state dropdowns in the interaction editor
+    const nextStateSelect = document.getElementById('trigger-next-state');
+    if (nextStateSelect) {
+        nextStateSelect.innerHTML = projectStates.map(s =>
+            `<option value="${s.id}">${s.name}</option>`
+        ).join('');
+    }
+}
+
+function addState() {
+    const name = prompt("Enter state name (e.g. Happy, Sad, Idle):", "New State");
+    if (!name) return;
+
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+    // Check if ID exists
+    if (projectStates.find(s => s.id === id)) {
+        alert("A state with this name already exists.");
+        return;
+    }
+
+    const newState = {
+        id: id,
+        name: name,
+        frames: [new Frame()]
+    };
+
+    projectStates.push(newState);
+
+    if (!activeStateId) {
+        switchState(id);
+    } else {
+        updateStatesPanel();
+    }
+}
+
+function switchState(stateId) {
+    if (activeStateId === stateId) return;
+
+    // 1. Save current frames to existing state
+    if (activeStateId) {
+        const current = projectStates.find(s => s.id === activeStateId);
+        if (current) current.frames = [...frames];
+    }
+
+    // 2. Load new state
+    const next = projectStates.find(s => s.id === stateId);
+    if (!next) return;
+
+    activeStateId = stateId;
+    frames = next.frames;
+    currentFrameIndex = 0;
+
+    // Update Animation Name Input
+    const animNameInput = document.getElementById('anim-name');
+    if (animNameInput) animNameInput.value = next.name;
+
+    renderTimeline();
+    renderEditor();
+    updateStatesPanel();
+    showToast(`Switched to: ${next.name}`);
+}
+
+function deleteState(stateId) {
+    if (projectStates.length <= 1) {
+        alert("You must have at least one state.");
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete the state '${stateId}'?`)) return;
+
+    const idx = projectStates.findIndex(s => s.id === stateId);
+    if (idx > -1) {
+        projectStates.splice(idx, 1);
+        if (activeStateId === stateId) {
+            switchState(projectStates[0].id);
+        } else {
+            updateStatesPanel();
+        }
+    }
+}
+
+// Interaction & Styles Setup
+function updateInteractionEditor() {
+    const editor = document.getElementById('interaction-editor');
+    const shapeExtras = document.getElementById('shape-extras');
+
+    if (currentTool === 'select' && selectedShape) {
+        // 1. Interaction Editor
+        if (editor) editor.classList.remove('hidden');
+
+        const triggerSelect = document.getElementById('trigger-type');
+        const nextStateSelect = document.getElementById('trigger-next-state');
+
+        if (selectedShape.interaction) {
+            if (triggerSelect) triggerSelect.value = selectedShape.interaction.trigger || 'click';
+            if (nextStateSelect) nextStateSelect.value = selectedShape.interaction.targetStateId || '';
+        } else {
+            if (triggerSelect) triggerSelect.value = 'click';
+        }
+
+        // 2. Shape Style Extras
+        if (shapeExtras) {
+            shapeExtras.classList.remove('hidden');
+
+            // Corner Radius (Rect only)
+            const radProp = document.getElementById('prop-corner-radius');
+            if (radProp) {
+                if (selectedShape.type === 'rect') {
+                    radProp.classList.remove('hidden');
+                    document.getElementById('corner-radius-slider').value = selectedShape.cornerRadius || 0;
+                    document.getElementById('corner-radius-val').innerText = (selectedShape.cornerRadius || 0) + 'px';
+                } else {
+                    radProp.classList.add('hidden');
+                }
+            }
+
+            // Sync Stroke UI
+            document.getElementById('stroke-width-slider').value = selectedShape.strokeWidth || 0;
+            document.getElementById('stroke-width-val').innerText = (selectedShape.strokeWidth || 0) + 'px';
+            document.getElementById('stroke-color-picker').value = selectedShape.strokeColor || '#ffffff';
+        }
+    } else {
+        if (editor) editor.classList.add('hidden');
+        if (shapeExtras) shapeExtras.classList.add('hidden');
+    }
+}
+
+function saveInteraction() {
+    if (!selectedShape) return;
+
+    const trigger = document.getElementById('trigger-type')?.value;
+    const target = document.getElementById('trigger-next-state')?.value;
+
+    selectedShape.interaction = {
+        trigger: trigger,
+        targetStateId: target
+    };
+
+    showToast(`Interaction saved for ${selectedShape.type}`);
+    renderEditor();
+}
+
+// Preset Logic
+function applyEyePreset(type) {
+    const frame = frames[currentFrameIndex];
+    if (!frame) return;
+
+    saveUndo();
+
+    // High-fidelity paths matched to the reference image
+    const eyePaths = {
+        angry: "M10,20 C30,15 70,5 95,25 C80,60 20,60 10,20 Z",
+        alert: "M20,15 C50,0 100,20 80,55 C40,70 0,50 20,15 Z",
+        sad: "M5,25 C30,10 70,10 95,25 C95,55 5,55 5,25 Z",
+        evil: "M5,35 Q50,0 95,35 Q50,70 5,35 Z",
+        bean: "M5,15 L95,15 Q95,60 50,60 Q5,60 5,15 Z",
+        slit: "M5,25 L95,25 C95,45 5,45 5,25 Z" // Simplified Rect-like path
+    };
+
+    const path = eyePaths[type];
+    const eyeWidth = 120;
+    const eyeHeight = 72;
+    const padding = 50;
+
+    // Create Left Eye
+    const leftEye = new Shape('path', (GRID_WIDTH / 2) - eyeWidth - padding, (GRID_HEIGHT / 2) - (eyeHeight / 2), eyeWidth, eyeHeight, currentColor);
+    leftEye.pathData = path;
+
+    // Create Right Eye (Mirroring)
+    const rightEye = new Shape('path', (GRID_WIDTH / 2) + padding, (GRID_HEIGHT / 2) - (eyeHeight / 2), eyeWidth, eyeHeight, currentColor);
+
+    // For asymmetric paths, we need to flip the path data for the right eye
+    // Simplest way is to keep a 'mirrored' flag or transformation, 
+    // but for now, we'll just use the same and rely on the user to flip if they want specialized mirroring,
+    // OR we can manually flip the path (complex). Let's just draw it.
+    rightEye.pathData = path;
+    rightEye.isMirrored = true; // We'll add support for this in drawing
+
+    frame.shapes.push(leftEye);
+    frame.shapes.push(rightEye);
+
+    selectedShape = rightEye;
+    currentTool = 'select';
+    updateToolButtons();
+    renderEditor();
+    updateLayersPanel();
+    showToast(`Applied ${type} eye preset`);
+}
+
+// Initialize and hook events
+window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('state-add-btn')?.addEventListener('click', addState);
+    document.getElementById('save-interaction-btn')?.addEventListener('click', saveInteraction);
+
+    // Style Sliders
+    document.getElementById('stroke-width-slider')?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        document.getElementById('stroke-width-val').innerText = val + 'px';
+        if (selectedShape) {
+            selectedShape.strokeWidth = val;
+            renderEditor();
+        }
+    });
+
+    document.getElementById('stroke-color-picker')?.addEventListener('input', (e) => {
+        if (selectedShape) {
+            selectedShape.strokeColor = e.target.value;
+            renderEditor();
+        }
+    });
+
+    document.getElementById('corner-radius-slider')?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        document.getElementById('corner-radius-val').innerText = val + 'px';
+        if (selectedShape && selectedShape.type === 'rect') {
+            selectedShape.cornerRadius = val;
+            renderEditor();
+        }
+    });
+
+    document.getElementById('tool-triangle-obj')?.addEventListener('click', () => {
+        currentTool = 'triangle-obj';
+        updateToolButtons();
+    });
+
+    document.getElementById('action-symmetry')?.addEventListener('click', (e) => {
+        isSymmetryEnabled = !isSymmetryEnabled;
+        const btn = e.currentTarget;
+        if (isSymmetryEnabled) {
+            btn.classList.add('bg-accent/20', 'text-accent');
+            btn.querySelector('i').classList.remove('text-zinc-500');
+            showToast("Horizontal Symmetry ON");
+        } else {
+            btn.classList.remove('bg-accent/20', 'text-accent');
+            btn.querySelector('i').classList.add('text-zinc-500');
+            showToast("Symmetry OFF");
+        }
+    });
+
+    // Initialize with a default 'Idle' state if empty
+    setTimeout(() => {
+        if (projectStates.length === 0) {
+            projectStates = [
+                {
+                    id: 'idle',
+                    name: 'Idle',
+                    frames: frames
+                }
+            ];
+            activeStateId = 'idle';
+            updateStatesPanel();
+        }
+    }, 100);
+});
+
+// ======== EYE PRESETS SYSTEM ========
+window.applyEyePreset = function (type) {
+    const frame = frames[currentFrameIndex];
+    if (!frame) return;
+
+    saveUndo();
+
+    const eyePaths = {
+        angry: "M10,20 C30,15 70,5 95,25 C80,60 20,60 10,20 Z",
+        alert: "M20,15 C50,0 100,20 80,55 C40,70 0,50 20,15 Z",
+        sad: "M5,25 C30,10 70,10 95,25 C95,55 5,55 5,25 Z",
+        evil: "M5,35 Q50,0 95,35 Q50,70 5,35 Z",
+        bean: "M5,15 L95,15 Q95,60 50,60 Q5,60 5,15 Z",
+        slit: "M5,25 L95,25 C95,45 5,45 5,25 Z"
+    };
+
+    const path = eyePaths[type];
+    const eyeWidth = 200;
+    const eyeHeight = 130;
+    const padding = 15;
+
+    // Remove existing shapes if user wants to replace (optional, but let's just add)
+    // Actually, adding is safer. User can clear if they want.
+
+    // Create Left Eye
+    const leftEye = new Shape('path', (GRID_WIDTH / 2) - eyeWidth - padding, (GRID_HEIGHT / 2) - (eyeHeight / 2), eyeWidth, eyeHeight, currentColor);
+    leftEye.pathData = path;
+
+    // Create Right Eye
+    const rightEye = new Shape('path', (GRID_WIDTH / 2) + padding, (GRID_HEIGHT / 2) - (eyeHeight / 2), eyeWidth, eyeHeight, currentColor);
+    rightEye.pathData = path;
+    rightEye.isMirrored = true;
+
+    frame.shapes.push(leftEye);
+    frame.shapes.push(rightEye);
+
+    selectedShape = rightEye;
+    currentTool = 'select';
+    updateToolButtons();
+    renderEditor();
+    updateLayersPanel();
+    showToast(`Applied ${type} eyes`);
+};

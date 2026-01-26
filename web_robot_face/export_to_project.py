@@ -317,15 +317,22 @@ def bake_animation_frames(frames, width, height, target_fps=30):
     return baked_frames
 
 def generate_c_file(json_data, output_dir):
-    """Generate C file from JSON animation data"""
+    """Generate C file from JSON animation data (supports Multiple States)"""
     
     width = json_data.get('width', 466)
     height = json_data.get('height', 466)
-    frames = json_data.get('frames', [])
     
-    if not frames:
-        print("❌ No frames found in JSON!")
+    # Support both old 'frames' and new 'states' format
+    if 'states' in json_data:
+        states_data = json_data['states']
+    else:
+        states_data = [{'id': 'default', 'name': json_data.get('name', 'default'), 'frames': json_data.get('frames', [])}]
+
+    if not states_data:
+        print("❌ No states found in JSON!")
         return None
+    
+    anim_name = json_data.get('name', 'exported_anim')
     
     # Get animation name
     if 'name' in json_data and json_data['name']:
@@ -346,119 +353,64 @@ def generate_c_file(json_data, output_dir):
             pass # Keep default if input fails
 
     # Sanitize name
-    anim_name = ''.join(c if c.isalnum() or c == '_' else '_' for c in anim_name.lower())
-    
-    print(f"\n📝 Generating: {anim_name}.c")
-    print(f"   Size: {width}x{height}")
-    # Bake animation (interpolate frames for smooth playback)
-    # Only bake if there are 2+ frames with shapes to interpolate
-    has_shapes = any(f.get('shapes') for f in frames)
-    if len(frames) >= 2 and has_shapes:
-        # Lower FPS + Runtime interpolation = Less rounding artifacts
-        target_fps = json_data.get('fps', 20)  # 20 FPS - runtime interpolation handles the rest
-        target_fps = max(10, min(target_fps, 60))  # Allow 10-60 FPS
-        frames = bake_animation_frames(frames, width, height, target_fps)
-
-    
-    print(f"   Final Frames: {len(frames)}")
-
-    total_size_mb = (len(frames) * width * height * 2) / (1024 * 1024)
-
-    c_content = f"""/**
- * @file {anim_name}.c
- * @brief Auto-generated VECTOR animation from Robot Face Studio
- */
-
-#include "anim_manager.h"
-
-"""
-    
-    # Mapping for shape types
-    type_map = {
-        'rect': 'SHAPE_RECT',
-        'ellipse': 'SHAPE_ELLIPSE',
-        'line': 'SHAPE_LINE',
-        'text': 'SHAPE_TEXT'
-    }
-
-    # Easing Mapping
-    easing_map = {
-        'linear': 0,
-        'ease-in': 1,
-        'ease-out': 2,
-        'ease-in-out': 3,
-        'overshoot': 4,
-        'bounce': 5,
-        'spring': 6
-    }
-    global_easing = easing_map.get(json_data.get('easingMode', 'linear'), 0)
-
-    # Generate shape arrays for each frame
-    frame_list = []
-    
-    for idx, frame in enumerate(frames):
-        if not frame: continue # Skip null frames
+    # Process each state
+    state_list = []
+    for state in states_data:
+        state_id = state.get('id', 'default')
+        frames = state.get('frames', [])
         
-        shapes = frame.get('shapes', [])
-        frame_var = f"{anim_name}_f{idx}_shapes"
-        
-        if shapes:
-            c_content += f"static const anim_shape_t {frame_var}[] = {{\n"
-            for s in shapes:
-                if not s: continue # Skip null shapes
-                
-                t = type_map.get(s.get('type'), 'SHAPE_RECT')
-                x = s.get('x', 0)
-                y = s.get('y', 0)
-                w = s.get('width', 0)
-                h = s.get('height', 0)
-                rot = s.get('rotation', 0)
-                opacity = s.get('opacity', 1.0)
-                
-                # Color conversion (#FFFFFF -> 0xFFFFFF)
-                color_str = s.get('color', '#FFFFFF')
-                color_hex = color_str.replace('#', '0x') if color_str else '0xFFFFFF'
-                
-                # Line specific handling
-                line_end = s.get('lineEnd')
-                if not isinstance(line_end, dict):
-                    line_end = {}
-                
-                x2 = line_end.get('x', 0)
-                y2 = line_end.get('y', 0)
-                
-                # Text specific handling
-                text_content = s.get('text', '')
-                font_size = s.get('fontSize', 14)
-                
-                if s.get('type') == 'text' and text_content:
-                    # Escape quotes in text
-                    text_escaped = text_content.replace('\\', '\\\\').replace('"', '\\"')
-                    c_content += f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, "{text_escaped}", {font_size} }},\n'
-                else:
-                    c_content += f"    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, NULL, 0 }},\n"
-            c_content += "};\n\n"
+        # Bake frames for this state
+        if len(frames) >= 2 and any(f.get('shapes') for f in frames):
+            target_fps = json_data.get('fps', 20)
+            frames = bake_animation_frames(frames, width, height, target_fps)
+            
+        # Generate Frame-by-Frame Shape Arrays
+        frame_vars = []
+        for f_idx, frame in enumerate(frames):
+            shapes = frame.get('shapes', [])
+            frame_var = f"{anim_name}_{state_id}_f{f_idx}_shapes"
+            if shapes:
+                c_content += f"static const anim_shape_t {frame_var}[] = {{\n"
+                for s in shapes:
+                    t = type_map.get(s.get('type'), 'SHAPE_RECT')
+                    x, y = s.get('x', 0), s.get('y', 0)
+                    w, h = s.get('width', 0), s.get('height', 0)
+                    rot = s.get('rotation', 0)
+                    opacity = s.get('opacity', 1.0)
+                    color_hex = s.get('color', '#FFFFFF').replace('#', '0x')
+                    
+                    le = s.get('lineEnd', {})
+                    x2, y2 = le.get('x', 0), le.get('y', 0)
+                    
+                    text = s.get('text', '').replace('\\', '\\\\').replace('"', '\\"')
+                    fs = s.get('fontSize', 14)
+                    
+                    c_content += f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, "{text}" if {t}==SHAPE_TEXT else NULL, {fs} }},\n'
+                c_content += "};\n\n"
+                frame_vars.append({'var': frame_var, 'count': len(shapes), 'dur': frame.get('duration', 100)})
+            else:
+                frame_vars.append({'var': 'NULL', 'count': 0, 'dur': frame.get('duration', 100)})
 
+        # Generate State Array
+        state_var = f"{anim_name}_{state_id}_frames"
+        c_content += f"static const anim_vector_frame_t {state_var}[] = {{\n"
+        for fv in frame_vars:
+            c_content += f"    {{ {fv['var']}, {fv['count']}, {fv['dur']}, {global_easing} }},\n"
+        c_content += "};\n\n"
         
-        frame_list.append({
-            'var': frame_var if shapes else 'NULL',
-            'count': len(shapes),
-            'duration': frame.get('duration', 100)
-        })
+        state_list.append({'id': state_id, 'var': state_var, 'count': len(frame_vars)})
 
-    # Generate frame array
-    c_content += f"static const anim_vector_frame_t {anim_name}_frames[] = {{\n"
-    for f in frame_list:
-        c_content += f"    {{ {f['var']}, {f['count']}, {int(f['duration'])}, {global_easing} }},\n"
+    # Main Registry for this Animation's States
+    c_content += f"const anim_state_t {anim_name}_states[] = {{\n"
+    for st in state_list:
+        c_content += f'    {{ "{st["id"]}", {st["var"]}, {st["count"]} }},\n'
     c_content += "};\n\n"
 
-    # Main animation struct
-    c_content += f"""const anim_vector_t {anim_name}_data = {{
-    .name = "{anim_name}",
-    .frames = {anim_name}_frames,
-    .frame_count = {len(frame_list)}
-}};
-"""
+    c_content += f"const anim_vector_t {anim_name}_data = {{\n"
+    c_content += f'    .name = "{anim_name}",\n'
+    c_content += f'    .states = {anim_name}_states,\n'
+    c_content += f'    .state_count = {len(state_list)}\n'
+    c_content += "};\n"
 
     # Write C file
     c_file = output_dir / f"{anim_name}.c"

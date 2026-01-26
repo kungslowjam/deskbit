@@ -453,7 +453,8 @@
 
             <div class="h-6 w-[1px] bg-border mx-1 shrink-0"></div>
 
-            <div class="flex items-center gap-4 min-w-0 overflow-hidden">
+            <!-- Removed overflow-hidden to allow dropdown visibility -->
+            <div class="flex items-center gap-4 min-w-0">
                 <div class="flex flex-col shrink-0">
                     <label class="text-[10px] uppercase font-bold text-zinc-500 ml-0.5 mb-1 tracking-wider">Name</label>
                     <input type="text" id="anim-name" value="my_anim"
@@ -470,7 +471,7 @@
                     </div>
                 </div>
 
-                <div class="flex flex-col shrink-0 h-[52px] justify-end pb-0.5">
+                <div class="flex flex-col shrink-0 h-[52px] justify-end pb-0.5 mr-2">
                     <label
                         class="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer hover:text-white transition-all h-[34px]">
                         <input type="checkbox" id="round-toggle" class="sr-only peer">
@@ -483,6 +484,97 @@
                         <span
                             class="font-bold uppercase text-[10px] tracking-wider text-zinc-500 peer-checked:text-accent transition-colors">Round</span>
                     </label>
+                </div>
+
+                <!-- Eye Library Dropdown (Hover + Click Support) -->
+                <div class="relative group h-[52px] flex items-end pb-0.5">
+                    <input type="checkbox" id="library-toggle" class="sr-only peer">
+                    <!-- Label as Toggle Button -->
+                    <label for="library-toggle"
+                        class="flex items-center gap-2 px-3 py-1.5 bg-accent/10 border border-accent/20 rounded-md text-accent hover:bg-accent hover:text-dark transition-all font-bold text-[10px] uppercase tracking-wider cursor-pointer active:scale-95 peer-checked:bg-accent peer-checked:text-dark group-hover:bg-accent/20">
+                        <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+                        LIBRARY
+                        <i data-lucide="chevron-down" class="w-3 h-3 transition-transform peer-checked:rotate-180"></i>
+                    </label>
+
+                    <!-- Dropdown Panel (Centering with translate-x) -->
+                    <div
+                        class="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-80 bg-panel border border-border rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] opacity-0 invisible group-hover:opacity-100 group-hover:visible peer-checked:opacity-100 peer-checked:visible transition-all z-[100] p-5 backdrop-blur-2xl ring-1 ring-white/10">
+                        <div class="flex items-center gap-3 mb-4 px-1">
+                            <span class="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Preset
+                                Templates</span>
+                            <div class="h-px bg-white/5 flex-1"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3" id="eye-library">
+                            <!-- Presets (Added slight scaling on hover for premium feel) -->
+                            <button
+                                class="eye-preset group/item p-2.5 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('angry')">
+                                <svg viewBox="0 0 100 60"
+                                    class="w-full h-auto drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M10,20 C30,15 70,5 95,25 C80,60 20,60 10,20 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[9px] font-black text-zinc-600 uppercase mt-2 block group-hover/item:text-accent tracking-tighter">Angry
+                                    Gaze</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2.5 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('alert')">
+                                <svg viewBox="0 0 100 60"
+                                    class="w-full h-auto drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M20,15 C50,0 100,20 80,55 C40,70 0,50 20,15 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[9px] font-black text-zinc-600 uppercase mt-2 block group-hover/item:text-accent tracking-tighter">Wide
+                                    Alert</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2.5 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('sad')">
+                                <svg viewBox="0 0 100 60"
+                                    class="w-full h-auto drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M5,25 C30,10 70,10 95,25 C95,55 5,55 5,25 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[9px] font-black text-zinc-600 uppercase mt-2 block group-hover/item:text-accent tracking-tighter">Sad
+                                    Curve</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2.5 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('evil')">
+                                <svg viewBox="0 0 100 60"
+                                    class="w-full h-auto drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M5,35 Q50,0 95,35 Q50,70 5,35 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[9px] font-black text-zinc-600 uppercase mt-2 block group-hover/item:text-accent tracking-tighter">Evil
+                                    Slit</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2.5 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('bean')">
+                                <svg viewBox="0 0 100 60"
+                                    class="w-full h-auto drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M5,15 L95,15 Q95,60 50,60 Q5,60 5,15 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[9px] font-black text-zinc-600 uppercase mt-2 block group-hover/item:text-accent tracking-tighter">Bean
+                                    Shape</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2.5 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('slit')">
+                                <svg viewBox="0 0 100 60"
+                                    class="w-full h-auto drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <rect x="5" y="25" width="90" height="15" rx="7" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[9px] font-black text-zinc-600 uppercase mt-2 block group-hover/item:text-accent tracking-tighter">Modern
+                                    Bar</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -575,10 +667,21 @@
                     <i data-lucide="minus" class="w-5 h-5 rotate-45"></i>
                 </button>
                 <button class="tool-btn tooltip p-3 rounded-xl hover:bg-white/5 transition-all flex justify-center"
+                    id="tool-triangle-obj" data-tooltip="Triangle">
+                    <i data-lucide="triangle" class="w-5 h-5"></i>
+                </button>
+                <button class="tool-btn tooltip p-3 rounded-xl hover:bg-white/5 transition-all flex justify-center"
                     id="tool-text-obj" data-tooltip="Text (T)">
                     <i data-lucide="type" class="w-5 h-5"></i>
                 </button>
+                <div class="h-px bg-border mx-2 my-1"></div>
+                <!-- Symmetry Toggle -->
+                <button class="tool-btn tooltip p-3 rounded-xl hover:bg-white/5 transition-all flex justify-center"
+                    id="action-symmetry" data-tooltip="Horizontal Symmetry (S)">
+                    <i data-lucide="split" class="w-5 h-5 text-zinc-500"></i>
+                </button>
             </div>
+
 
             <div class="mt-auto flex flex-col gap-4">
                 <button id="action-undo" class="p-2 text-zinc-500 hover:text-white transition-colors"><i
@@ -670,6 +773,56 @@
                 </div>
             </div>
 
+            <!-- Interactions & States Section -->
+            <div class="flex flex-col shrink-0 border-b border-border/50 bg-black/5">
+                <div class="p-4 border-b border-border flex items-center justify-between">
+                    <span class="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center gap-2">
+                        <i data-lucide="zap" class="w-3.5 h-3.5 text-zinc-600"></i> Interactions & States
+                    </span>
+                    <button id="state-add-btn"
+                        class="w-7 h-7 flex items-center justify-center bg-accent/10 text-accent hover:bg-accent hover:text-dark rounded-lg transition-all shadow-sm">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <div id="states-list" class="flex flex-col gap-1 p-3 custom-scrollbar max-h-[180px] overflow-y-auto">
+                    <!-- State Items -->
+                    <div
+                        class="text-[10px] text-zinc-600 font-bold text-center py-4 bg-black/20 rounded-lg border border-white/5 border-dashed">
+                        No states defined
+                    </div>
+                </div>
+
+                <!-- Interaction Setup (Context-aware) -->
+                <div id="interaction-editor" class="p-4 border-t border-border bg-panel hidden">
+                    <div class="flex flex-col gap-3">
+                        <span class="text-[9px] uppercase font-black text-accent tracking-widest">Setup
+                            Interaction</span>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-center justify-between text-[10px]">
+                                <span class="text-zinc-500 font-bold">Trigger</span>
+                                <select id="trigger-type"
+                                    class="bg-zinc-900 border border-white/10 rounded-md px-2 py-1 text-zinc-300">
+                                    <option value="click">On Click (Touch)</option>
+                                    <option value="timer">Auto (Timer)</option>
+                                    <option value="finish">On Finish</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center justify-between text-[10px]">
+                                <span class="text-zinc-500 font-bold">Next State</span>
+                                <select id="trigger-next-state"
+                                    class="bg-zinc-900 border border-white/10 rounded-md px-2 py-1 text-zinc-300">
+                                    <option value="idle">Idle</option>
+                                </select>
+                            </div>
+                            <button id="save-interaction-btn"
+                                class="w-full bg-accent/20 text-accent font-black py-2 rounded-lg text-[9px] uppercase tracking-widest mt-1 hover:bg-accent hover:text-dark transition-all">Save
+                                Interaction</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Properties Panel -->
             <div
                 class="p-6 border-t border-border bg-black/20 flex flex-col gap-8 shadow-[-10px_0_30px_rgba(0,0,0,0.3)] relative z-10">
@@ -694,6 +847,10 @@
                                 onclick="setColor('#ff0055', this)"></div>
                             <div class="color-preset w-7 h-7 rounded-lg bg-[#00ff66] cursor-pointer ring-1 ring-white/5 hover:scale-110 active:scale-90 transition-all shadow-sm"
                                 onclick="setColor('#00ff66', this)"></div>
+                            <div class="color-preset w-7 h-7 rounded-lg bg-[#ffaa00] cursor-pointer ring-1 ring-white/5 hover:scale-110 active:scale-90 transition-all shadow-sm"
+                                onclick="setColor('#ffaa00', this)"></div>
+                            <div class="color-preset w-7 h-7 rounded-lg bg-[#888888] cursor-pointer ring-1 ring-white/5 hover:scale-110 active:scale-90 transition-all shadow-sm"
+                                onclick="setColor('#888888', this)"></div>
                             <div class="color-preset w-7 h-7 rounded-lg bg-white cursor-pointer ring-1 ring-white/5 hover:scale-110 active:scale-90 transition-all shadow-sm"
                                 onclick="setColor('#ffffff', this)"></div>
                         </div>
@@ -721,8 +878,52 @@
                             id="opacity-val">100%</span>
                     </div>
                     <div class="px-1">
-                        <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="1"
+                        <input type="range" id="opacity-slider" min="0" max="1" step="0.05" value="1"
                             class="w-full accent-accent h-1.5 rounded-full bg-zinc-800 appearance-none cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- Stroke Property (New) -->
+                <div class="flex flex-col gap-4 bg-zinc-900/40 p-3 rounded-2xl border border-white/5">
+                    <span class="text-[10px] uppercase font-black text-zinc-600 tracking-widest px-1">Stroke /
+                        Border</span>
+
+                    <div class="flex flex-col gap-3">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-[9px] font-bold text-zinc-500 uppercase">Width</span>
+                            <span class="text-[9px] font-mono text-accent" id="stroke-width-val">0px</span>
+                        </div>
+                        <input type="range" id="stroke-width-slider" min="0" max="20" step="1" value="0"
+                            class="w-full h-1 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-accent">
+                    </div>
+
+                    <div class="flex items-center justify-between px-1">
+                        <span class="text-[9px] font-bold text-zinc-500 uppercase">Color</span>
+                        <input type="color" id="stroke-color-picker" value="#ffffff"
+                            class="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer p-0 overflow-hidden">
+                    </div>
+                </div>
+
+                <!-- Shape Specific Details (Context Aware) -->
+                <div id="shape-extras" class="flex flex-col gap-4 border-t border-white/5 pt-4 hidden">
+                    <!-- Corner Radius (for Rects) -->
+                    <div id="prop-corner-radius" class="flex flex-col gap-3 hidden">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-[9px] font-bold text-zinc-400 uppercase">Corner Radius</span>
+                            <span class="text-[9px] font-mono text-accent" id="corner-radius-val">0px</span>
+                        </div>
+                        <input type="range" id="corner-radius-slider" min="0" max="100" step="1" value="0"
+                            class="w-full h-1 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-accent">
+                    </div>
+
+                    <!-- Polygon Sides / Star Points -->
+                    <div id="prop-polygon-sides" class="flex flex-col gap-3 hidden">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-[9px] font-bold text-zinc-400 uppercase">Sides / Points</span>
+                            <span class="text-[9px] font-mono text-accent" id="polygon-sides-val">5</span>
+                        </div>
+                        <input type="range" id="polygon-sides-slider" min="3" max="12" step="1" value="5"
+                            class="w-full h-1 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-accent">
                     </div>
                 </div>
 
