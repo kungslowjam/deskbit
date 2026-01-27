@@ -4,13 +4,30 @@ import socketserver
 import json
 import os
 import sys
+import traceback
+import importlib.util
 from pathlib import Path
 
 # Import existing logic (reuse your current powerful script)
+export_mod = None
 try:
-    from export_to_project import generate_c_file, generate_h_file, update_cmake, update_registry
-except ImportError:
-    pass
+    export_path = Path(__file__).parent / "export_to_project.py"
+    if export_path.exists():
+        spec = importlib.util.spec_from_file_location("export_to_project_local", export_path)
+        if spec and spec.loader:
+            export_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(export_mod)
+    if export_mod is None:
+        import export_to_project as export_mod
+
+    generate_c_file = export_mod.generate_c_file
+    generate_h_file = export_mod.generate_h_file
+    update_cmake = export_mod.update_cmake
+    update_registry = export_mod.update_registry
+    print(f"🔧 Using export_to_project from: {getattr(export_mod, '__file__', 'unknown')}")
+except Exception:
+    export_mod = None
+    traceback.print_exc()
 
 try:
     from delete_anim import delete_animation
@@ -45,18 +62,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 
                 print(f"\n⚡ Received Animation: {anim_name}")
                 
-                # 1. Generate C/H Files
-                generated_name = generate_c_file(data, anim_dir)
+                # 1. Reload exporter each request to avoid stale imports
+                try:
+                    export_path = Path(__file__).parent / "export_to_project.py"
+                    spec = importlib.util.spec_from_file_location("export_to_project_local", export_path)
+                    if spec and spec.loader:
+                        export_mod_local = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(export_mod_local)
+                        gen_c = export_mod_local.generate_c_file
+                        gen_h = export_mod_local.generate_h_file
+                        upd_cmake = export_mod_local.update_cmake
+                        upd_registry = export_mod_local.update_registry
+                    else:
+                        gen_c = generate_c_file
+                        gen_h = generate_h_file
+                        upd_cmake = update_cmake
+                        upd_registry = update_registry
+                except Exception:
+                    gen_c = generate_c_file
+                    gen_h = generate_h_file
+                    upd_cmake = update_cmake
+                    upd_registry = update_registry
+
+                # 2. Generate C/H Files
+                generated_name = gen_c(data, anim_dir)
                 
                 if generated_name:
                     # 1.5. Generate H File
-                    generate_h_file(generated_name, anim_dir)
+                    gen_h(generated_name, anim_dir)
                     
                     # 2. Update CMake
-                    update_cmake(generated_name, user_app_dir / "CMakeLists.txt")
+                    upd_cmake(generated_name, user_app_dir / "CMakeLists.txt")
                     
                     # 3. Update Registry
-                    update_registry(generated_name, user_app_dir / "anim_registry.c", data.get('width', 466))
+                    upd_registry(generated_name, user_app_dir / "anim_registry.c", data.get('width', 466))
                     
                     # Success Response
                     self.send_response(200)
@@ -70,6 +109,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     
             except Exception as e:
                 print(f"❌ Error: {e}")
+                traceback.print_exc()
                 self.send_error(500, str(e))
                 
         elif self.path == '/delete-anim':

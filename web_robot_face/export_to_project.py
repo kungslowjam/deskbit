@@ -353,69 +353,96 @@ def generate_c_file(json_data, output_dir):
             pass # Keep default if input fails
 
     # Sanitize name
-    # Process each state
-    state_list = []
-    for state in states_data:
-        state_id = state.get('id', 'default')
-        frames = state.get('frames', [])
-        
-        # Bake frames for this state
-        if len(frames) >= 2 and any(f.get('shapes') for f in frames):
-            target_fps = json_data.get('fps', 20)
-            frames = bake_animation_frames(frames, width, height, target_fps)
-            
-        # Generate Frame-by-Frame Shape Arrays
-        frame_vars = []
-        for f_idx, frame in enumerate(frames):
-            shapes = frame.get('shapes', [])
-            frame_var = f"{anim_name}_{state_id}_f{f_idx}_shapes"
-            if shapes:
-                c_content += f"static const anim_shape_t {frame_var}[] = {{\n"
-                for s in shapes:
-                    t = type_map.get(s.get('type'), 'SHAPE_RECT')
-                    x, y = s.get('x', 0), s.get('y', 0)
-                    w, h = s.get('width', 0), s.get('height', 0)
-                    rot = s.get('rotation', 0)
-                    opacity = s.get('opacity', 1.0)
-                    color_hex = s.get('color', '#FFFFFF').replace('#', '0x')
-                    
-                    le = s.get('lineEnd', {})
-                    x2, y2 = le.get('x', 0), le.get('y', 0)
-                    
-                    text = s.get('text', '').replace('\\', '\\\\').replace('"', '\\"')
-                    fs = s.get('fontSize', 14)
-                    
-                    c_content += f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, "{text}" if {t}==SHAPE_TEXT else NULL, {fs} }},\n'
-                c_content += "};\n\n"
-                frame_vars.append({'var': frame_var, 'count': len(shapes), 'dur': frame.get('duration', 100)})
-            else:
-                frame_vars.append({'var': 'NULL', 'count': 0, 'dur': frame.get('duration', 100)})
+    anim_name = anim_name.replace(' ', '_').lower()
 
-        # Generate State Array
-        state_var = f"{anim_name}_{state_id}_frames"
-        c_content += f"static const anim_vector_frame_t {state_var}[] = {{\n"
-        for fv in frame_vars:
-            c_content += f"    {{ {fv['var']}, {fv['count']}, {fv['dur']}, {global_easing} }},\n"
-        c_content += "};\n\n"
-        
-        state_list.append({'id': state_id, 'var': state_var, 'count': len(frame_vars)})
+    # Easing is stored as numeric enum in anim_vector_frame_t
+    global_easing = 0  # Linear
+    
+    print(f"DEBUG: Generating C file for {anim_name} (Updated Version)")
 
-    # Main Registry for this Animation's States
-    c_content += f"const anim_state_t {anim_name}_states[] = {{\n"
-    for st in state_list:
-        c_content += f'    {{ "{st["id"]}", {st["var"]}, {st["count"]} }},\n'
-    c_content += "};\n\n"
+    output_c_content = f'#include "anim_manager.h"\n#include "lvgl.h"\n\n'
+    
+    # Define mapping from string type to enum (ui_custom_anim.h)
+    type_map = {
+        'rect': 'SHAPE_RECT',
+        'ellipse': 'SHAPE_ELLIPSE',
+        'line': 'SHAPE_LINE',
+        'text': 'SHAPE_TEXT',
+        # Editor path objects are not supported in firmware yet.
+        # Export as ellipse to keep build working.
+        'path': 'SHAPE_ELLIPSE'
+    }
 
-    c_content += f"const anim_vector_t {anim_name}_data = {{\n"
-    c_content += f'    .name = "{anim_name}",\n'
-    c_content += f'    .states = {anim_name}_states,\n'
-    c_content += f'    .state_count = {len(state_list)}\n'
-    c_content += "};\n"
+    # Pick the active state (or fallback to the first)
+    active_state_id = json_data.get('activeStateId')
+    selected_state = None
+    if active_state_id:
+        for st in states_data:
+            if st.get('id') == active_state_id:
+                selected_state = st
+                break
+    if selected_state is None:
+        selected_state = states_data[0]
+
+    frames = selected_state.get('frames', [])
+
+    # Bake frames for this state
+    if len(frames) >= 2 and any(f.get('shapes') for f in frames):
+        target_fps = json_data.get('fps', 20)
+        frames = bake_animation_frames(frames, width, height, target_fps)
+
+    # Generate Frame-by-Frame Shape Arrays
+    frame_vars = []
+    for f_idx, frame in enumerate(frames):
+        shapes = frame.get('shapes', []) or []
+        frame_var = f"{anim_name}_f{f_idx}_shapes"
+        if shapes:
+            output_c_content += f"static const anim_shape_t {frame_var}[] = {{\n"
+            for s in shapes:
+                if not isinstance(s, dict):
+                    continue
+                t = type_map.get(s.get('type'), 'SHAPE_RECT')
+                x, y = s.get('x', 0), s.get('y', 0)
+                w, h = s.get('width', 0), s.get('height', 0)
+                rot = s.get('rotation', 0)
+                opacity = s.get('opacity', 1.0)
+                color_value = s.get('color') or '#FFFFFF'
+                color_hex = str(color_value).replace('#', '0x')
+
+                le = s.get('lineEnd') or {}
+                if not isinstance(le, dict):
+                    le = {}
+                x2, y2 = le.get('x', 0), le.get('y', 0)
+
+                text_raw = s.get('text', '')
+                text = (text_raw if text_raw is not None else '')
+                text = str(text).replace('\\', '\\\\').replace('"', '\\"')
+                fs = s.get('fontSize', 14)
+
+                text_field = f"\"{text}\"" if t == 'SHAPE_TEXT' else 'NULL'
+                output_c_content += f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, {text_field}, {fs} }},\n'
+            output_c_content += "};\n\n"
+            frame_vars.append({'var': frame_var, 'count': len(shapes), 'dur': frame.get('duration', 100)})
+        else:
+            frame_vars.append({'var': 'NULL', 'count': 0, 'dur': frame.get('duration', 100)})
+
+    # Generate Frames Array
+    frames_var = f"{anim_name}_frames"
+    output_c_content += f"static const anim_vector_frame_t {frames_var}[] = {{\n"
+    for fv in frame_vars:
+        output_c_content += f"    {{ {fv['var']}, {fv['count']}, {fv['dur']}, {global_easing} }},\n"
+    output_c_content += "};\n\n"
+
+    output_c_content += f"const anim_vector_t {anim_name}_data = {{\n"
+    output_c_content += f'    .name = "{anim_name}",\n'
+    output_c_content += f'    .frames = {frames_var},\n'
+    output_c_content += f'    .frame_count = {len(frame_vars)}\n'
+    output_c_content += "};\n"
 
     # Write C file
     c_file = output_dir / f"{anim_name}.c"
     with open(c_file, 'w', encoding='utf-8') as f:
-        f.write(c_content)
+        f.write(output_c_content)
     
     print(f"✅ Generated: {c_file} (Vector Format)")
     return anim_name
