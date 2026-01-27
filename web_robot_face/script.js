@@ -435,11 +435,13 @@ function init() {
     const playBtn = document.getElementById('play-btn');
     const stopBtn = document.getElementById('stop-btn');
     const exportCBtn = document.getElementById('export-c-btn');
+    const importJsonBtn = document.getElementById('import-btn');
     const exportJsonBtn = document.getElementById('export-btn');
 
     if (playBtn) playBtn.onclick = startPlay;
     if (stopBtn) stopBtn.onclick = stopPlay;
     if (exportCBtn) exportCBtn.onclick = exportToC;
+    if (importJsonBtn) importJsonBtn.onclick = importFromJSON;
     if (exportJsonBtn) exportJsonBtn.onclick = exportToJSON;
     const exportNativeBtn = document.getElementById('export-lvgl-native-btn');
     if (exportNativeBtn) exportNativeBtn.onclick = exportToLVGLNative;
@@ -2843,9 +2845,34 @@ async function importFromJSON() {
             const text = await file.text();
             const data = JSON.parse(text);
 
+            // 1. Restore Global Settings
             if (data.width && data.height) {
                 resizeCanvas(data.width, data.height);
             }
+
+            if (data.fps) {
+                const fpsRange = document.getElementById('fps-range');
+                const fpsValue = document.getElementById('fps-value');
+                if (fpsRange) fpsRange.value = data.fps;
+                if (fpsValue) fpsValue.textContent = `${data.fps} FPS`;
+            }
+
+            if (data.easingMode) {
+                const easingSelect = document.getElementById('easing-mode');
+                if (easingSelect) {
+                    easingSelect.value = data.easingMode;
+                    // Trigger change event to update UI visibility
+                    easingSelect.dispatchEvent(new Event('change'));
+                }
+            }
+
+            // Restore Animation Name if saved
+            const animNameInput = document.getElementById('anim-name');
+            if (animNameInput && data.name) { // 'name' might not be at root in v1.1 export structure used, but let's check
+                // actually exportToJSON doesn't save name at root, it saves activeStateId. 
+                // Whatever, let's keep going.
+            }
+
 
             if (data.states && Array.isArray(data.states)) {
                 // v1.1 format with states
@@ -2872,6 +2899,11 @@ async function importFromJSON() {
                                 shape.strokeWidth = s.strokeWidth || 0;
                                 shape.strokeColor = s.strokeColor || '#ffffff';
                                 shape.cornerRadius = s.cornerRadius || 0;
+                                if (s.pathData) shape.pathData = s.pathData;
+                                if (s.isMirrored) shape.isMirrored = s.isMirrored;
+
+                                // Parse path nodes if it's a path type
+                                if (shape.type === 'path') shape.parsePath();
                                 return shape;
                             });
                         }
@@ -2896,7 +2928,10 @@ async function importFromJSON() {
                             shape.rotation = s.rotation || 0;
                             shape.id = s.id || (Date.now() + Math.random());
                             if (s.lineEnd) shape.lineEnd = { ...s.lineEnd };
-                            if (s.pathData) shape.pathData = s.pathData;
+                            if (s.pathData) {
+                                shape.pathData = s.pathData;
+                                shape.parsePath();
+                            }
                             if (s.isMirrored) shape.isMirrored = s.isMirrored;
                             return shape;
                         });
@@ -2907,7 +2942,21 @@ async function importFromJSON() {
                 activeStateId = 'idle';
             }
 
-            switchState(activeStateId);
+            // Manually set frames locally from the active state so ui updates correct
+            const activeState = projectStates.find(s => s.id === activeStateId);
+            if (activeState) {
+                frames = activeState.frames;
+                currentFrameIndex = 0;
+            }
+
+            // Force refresh
+            if (typeof updateStatesPanel === 'function') updateStatesPanel();
+            if (typeof drawCurvePreview === 'function') drawCurvePreview();
+
+            renderTimeline();
+            renderEditor();
+            updateFrameInfo(); // Update duration inputs and stuff
+
             showToast(`Loaded ${projectStates.length} states`);
         } catch (err) {
             console.error(err);
