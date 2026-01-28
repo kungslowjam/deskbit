@@ -1212,12 +1212,7 @@ function invertColors() {
     renderTimeline();
 }
 
-function cloneShape(shape) {
-    const newShape = new Shape(shape.type, shape.x, shape.y, shape.width, shape.height, shape.color);
-    newShape.rotation = shape.rotation;
-    if (shape.lineEnd) newShape.lineEnd = { ...shape.lineEnd };
-    return newShape;
-}
+
 
 // Clipboard for shapes
 let shapeClipboard = null;
@@ -2243,8 +2238,7 @@ function renderPreview(frameIndex, interpolation = null) {
     }
 
     // 4. Ghost Shape (Sync drawing)
-    const isDrawing = document.body.classList.contains('drawing-tool-active'); // We should check a variable instead
-    // Since we are in script.js, let's just check the existing boolean
+
     if (typeof isDrawingShape !== 'undefined' && isDrawingShape && lastCoords) {
         pCtx.strokeStyle = currentColor;
         pCtx.fillStyle = currentColor;
@@ -3029,105 +3023,7 @@ function toggleOnionSkin(enabled) {
 
 
 // Override renderEditor to add onion skinning
-function renderEditorWithOnion() {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const frame = frames[currentFrameIndex];
-    if (!frame) return;
-
-    // Draw onion skin (previous frame)
-    if (onionSkinEnabled && currentFrameIndex > 0) {
-        const prevFrame = frames[currentFrameIndex - 1];
-        if (prevFrame) {
-            ctx.globalAlpha = onionSkinOpacity;
-
-            // Draw previous frame pixels
-            if (prevFrame.isCacheDirty) prevFrame.updateCache();
-            ctx.drawImage(prevFrame.cacheCanvas, 0, 0);
-
-            // Draw shapes
-            if (prevFrame.shapes) {
-                prevFrame.shapes.forEach(shape => {
-                    ctx.globalAlpha = onionSkinOpacity * 0.5;
-                    shape.draw(ctx);
-                });
-            }
-
-            ctx.globalAlpha = 1.0;
-        }
-    }
-
-    // Draw current frame pixels
-    if (frame.isCacheDirty) frame.updateCache();
-    ctx.drawImage(frame.cacheCanvas, 0, 0);
-
-    // Draw shapes
-    if (frame.shapes && frame.shapes.length > 0) {
-        frame.shapes.forEach(shape => {
-            shape.draw(ctx);
-
-            // Draw Vector Nodes if editing
-            if (shape === selectedShape && shape.type === 'path' && shape.isEditingPositions) {
-                ctx.fillStyle = '#00d2ff';
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1;
-
-                shape.nodes.forEach((node, i) => {
-                    if (node.type === 'Z') return;
-
-                    // Convert normalized 100x60 Library coords to actual shape units
-                    // (Actually nodes are already absolute relative to shape origin)
-                    const nx = shape.x + (node.x * (shape.width / 100));
-                    const ny = shape.y + (node.y * (shape.height / 60));
-
-                    ctx.beginPath();
-                    ctx.arc(nx, ny, 4, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-                });
-            }
-        });
-    }
-
-    // Draw selection box if shape is selected
-    if (selectedShape) {
-        const bounds = selectedShape.getBounds();
-        const padding = 4;
-
-        ctx.strokeStyle = '#00d2ff';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 3]);
-        ctx.strokeRect(
-            bounds.x - padding,
-            bounds.y - padding,
-            bounds.width + padding * 2,
-            bounds.height + padding * 2
-        );
-        ctx.setLineDash([]);
-
-        // Draw resize handles (corners)
-        const handleSize = 8;
-        ctx.fillStyle = '#00d2ff';
-
-        const corners = [
-            { x: bounds.x - padding, y: bounds.y - padding },
-            { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y - padding },
-            { x: bounds.x - padding, y: bounds.y + bounds.height + padding - handleSize },
-            { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y + bounds.height + padding - handleSize }
-        ];
-
-        corners.forEach(corner => {
-            ctx.fillRect(corner.x, corner.y, handleSize, handleSize);
-        });
-    }
-
-    // Update preview canvas
-    renderPreview();
-
-    // Update frame info
-    updateFrameInfo();
-}
 
 // Start
 init();
@@ -3568,52 +3464,7 @@ function saveInteraction() {
     renderEditor();
 }
 
-// Preset Logic
-function applyEyePreset(type) {
-    const frame = frames[currentFrameIndex];
-    if (!frame) return;
 
-    saveUndo();
-
-    // High-fidelity paths matched to the reference image
-    const eyePaths = {
-        angry: "M10,20 C30,15 70,5 95,25 C80,60 20,60 10,20 Z",
-        alert: "M20,15 C50,0 100,20 80,55 C40,70 0,50 20,15 Z",
-        sad: "M5,25 C30,10 70,10 95,25 C95,55 5,55 5,25 Z",
-        evil: "M5,35 Q50,0 95,35 Q50,70 5,35 Z",
-        bean: "M5,15 L95,15 Q95,60 50,60 Q5,60 5,15 Z",
-        slit: "M5,25 L95,25 C95,45 5,45 5,25 Z" // Simplified Rect-like path
-    };
-
-    const path = eyePaths[type];
-    const eyeWidth = 120;
-    const eyeHeight = 72;
-    const padding = 50;
-
-    // Create Left Eye
-    const leftEye = new Shape('path', (GRID_WIDTH / 2) - eyeWidth - padding, (GRID_HEIGHT / 2) - (eyeHeight / 2), eyeWidth, eyeHeight, currentColor);
-    leftEye.pathData = path;
-
-    // Create Right Eye (Mirroring)
-    const rightEye = new Shape('path', (GRID_WIDTH / 2) + padding, (GRID_HEIGHT / 2) - (eyeHeight / 2), eyeWidth, eyeHeight, currentColor);
-
-    // For asymmetric paths, we need to flip the path data for the right eye
-    // Simplest way is to keep a 'mirrored' flag or transformation, 
-    // but for now, we'll just use the same and rely on the user to flip if they want specialized mirroring,
-    // OR we can manually flip the path (complex). Let's just draw it.
-    rightEye.pathData = path;
-    rightEye.isMirrored = true; // We'll add support for this in drawing
-
-    frame.shapes.push(leftEye);
-    frame.shapes.push(rightEye);
-
-    selectedShape = rightEye;
-    currentTool = 'select';
-    updateToolButtons();
-    renderEditor();
-    updateLayersPanel();
-    showToast(`Applied ${type} eye preset`);
-}
 
 // Initialize and hook events
 window.addEventListener('DOMContentLoaded', () => {

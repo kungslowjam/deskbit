@@ -65,7 +65,9 @@ def delete_animation(anim_name):
             # We look for the name usage in register function
             clean_name = anim_name.replace("_anim", "")
             if f'anim_manager_register("{clean_name}"' in line or \
-               f'anim_manager_register("{anim_name}"' in line:
+               f'anim_manager_register("{anim_name}"' in line or \
+               f'anim_manager_register_vector(&{anim_name}_data)' in line or \
+               f'anim_manager_register_vector(&{clean_name}_data)' in line:
                 modified = True
                 continue # Skip
                 

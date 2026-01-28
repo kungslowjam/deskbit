@@ -286,6 +286,7 @@
             border: 1px solid rgba(255, 255, 255, 0.05);
             overflow: hidden;
             height: 80px;
+            min-width: 60px;
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
             cursor: pointer;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -617,13 +618,13 @@
 
             <!-- Group 3: High Priority Actions -->
             <div class="flex items-center gap-2 shrink-0">
-                <button id="send-btn"
+                <button id="send-btn" onclick="sendToRobot()"
                     class="bg-accent text-dark h-9 px-4 rounded-lg text-xs font-bold shadow-[0_0_15px_rgba(0,210,255,0.4)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
                     <i data-lucide="send" class="w-4 h-4 stroke-[2.5]"></i> <span class="hidden sm:inline">SEND TO
                         ROBOT</span><span class="sm:hidden">SEND</span>
                 </button>
                 <button id="del-btn" onclick="deleteFromRobot()"
-                    class="w-9 h-9 flex items-center justify-center hover:bg-red-500/10 text-red-500 rounded-lg border border-red-500/20 transition-all">
+                    class="w-9 h-9 flex items-center justify-center hover:bg-red-500/10 text-red-500 rounded-lg border border-red-500/20 transition-all cursor-pointer">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
             </div>
@@ -1110,9 +1111,7 @@
         <div class="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar bg-black/30 relative select-none"
             id="timeline-area">
             <div class="pt-4">
-                <div id="timeline-ruler" class="h-6 relative">
-                    <!-- Ticks injected here -->
-                </div>
+                <canvas id="timeline-ruler" class="h-6 relative"></canvas>
                 <div id="timeline-tracks" class="relative px-0 h-full">
                     <div id="main-track" class="relative h-24">
                         <!-- Frames injected here -->
@@ -1126,13 +1125,11 @@
         </div>
     </footer>
 
-    <script src="script.js"></script>
+    <script type="module" src="js/main.js?v=cachebust_io_final_v20"></script>
     <script>
-        // Initialize icons
-        document.addEventListener('DOMContentLoaded', () => {
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
+        // Fallback Icon Initialization
+        window.addEventListener('load', () => {
+            if (window.lucide) window.lucide.createIcons();
         });
     </script>
 </body>
