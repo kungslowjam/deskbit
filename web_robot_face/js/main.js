@@ -5,10 +5,11 @@ import { initRenderer, renderEditor, renderPreview, drawCurvePreview } from './r
 state.actions.renderEditor = renderEditor;
 state.actions.renderPreview = renderPreview;
 // History callback setup moved to init
-import { initTimeline, renderTimeline, startPlay, stopPlay, addFrame, duplicateFrame, deleteFrame } from './timeline.js';
+import { initTimeline, renderTimeline, addFrame, duplicateFrame, deleteFrame } from './timeline.js';
+import { startPlayback, stopPlayback, updatePlayheadPosition } from './playback.js';
 import { initTools, setupEventListeners, applyEyePreset } from './tools.js';
 import { initRuler } from './timeline.js'; // Helper
-import { updateFrameInfo, updateToolButtons, updateStatesPanel, toggleRound, setZoom, updateInteractionEditor, updateLayersPanel } from './ui.js';
+import { updateFrameInfo, updateToolButtons, updateStatesPanel, toggleRound, setZoom, updateInteractionEditor, updateLayersPanel, showToast } from './ui.js';
 import { undo, redo, saveUndo, setHistoryRefreshCallback } from './history.js';
 import * as IO from './io.js';
 import { PIXELS_PER_SEC } from './constants.js';
@@ -17,7 +18,7 @@ import { Frame } from './models.js';
 // Global Resize Function
 function resizeCanvas(newWidth, newHeight) {
     if (newWidth < 8 || newHeight < 8 || newWidth > 512 || newHeight > 512) {
-        alert('Canvas size must be between 8 and 512'); // detailed toast in ui?
+        showToast('Canvas size must be between 8 and 512');
         return;
     }
 
@@ -128,8 +129,8 @@ async function init() {
         });
 
         // Timeline Controls
-        document.getElementById('play-btn')?.addEventListener('click', startPlay);
-        document.getElementById('stop-btn')?.addEventListener('click', stopPlay);
+        document.getElementById('play-btn')?.addEventListener('click', startPlayback);
+        document.getElementById('stop-btn')?.addEventListener('click', stopPlayback);
         document.getElementById('add-frame-btn')?.addEventListener('click', addFrame);
         document.getElementById('dup-frame-btn')?.addEventListener('click', duplicateFrame);
         document.getElementById('del-frame-btn')?.addEventListener('click', deleteFrame);
@@ -201,12 +202,74 @@ async function init() {
 
         if (window.lucide) window.lucide.createIcons();
 
+        // Initialize Property Listeners
+        setupPropertyListeners();
+
         console.log("Init Complete.");
 
     } catch (e) {
         console.error("CRITICAL INIT ERROR:", e);
         alert("CRITICAL INIT ERROR:\n" + e.message + "\nCheck console for details.");
     }
+}
+
+function setupPropertyListeners() {
+    const bind = (id, prop, parse = (v) => v, onUpdate = null) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        // Initial sync from State to UI (optional, or rely on defaults)
+        // actually state has defaults, UI might have different initial value in HTML.
+        // We should probably sync UI to State or State to UI?
+        // Let's defer to UI's initial value for now or force state defaults.
+        // For now, just bind input.
+
+        el.addEventListener('input', (e) => {
+            const val = parse(e.target.value);
+            // Update Global Defaults
+            if (state.shapeDefaults.hasOwnProperty(prop)) {
+                state.shapeDefaults[prop] = val;
+            } else if (prop === 'brushSize') {
+                state.brushSize = val;
+            }
+
+            // Update Selected Shape
+            if (state.selectedShape) {
+                // Only update if property exists on shape or is relevant
+                if (prop in state.selectedShape) {
+                    state.selectedShape[prop] = val;
+                    if (state.actions.renderEditor) state.actions.renderEditor();
+                }
+            }
+
+            // UI Label Update
+            if (onUpdate) onUpdate(val);
+        });
+    };
+
+    bind('opacity-slider', 'opacity', parseFloat, (v) => {
+        const l = document.getElementById('opacity-val');
+        if (l) l.innerText = Math.round(v * 100) + '%';
+    });
+    bind('stroke-width-slider', 'strokeWidth', parseInt, (v) => {
+        const l = document.getElementById('stroke-width-val');
+        if (l) l.innerText = v + 'px';
+    });
+    bind('stroke-color-picker', 'strokeColor');
+    bind('corner-radius-slider', 'cornerRadius', parseInt, (v) => {
+        const l = document.getElementById('corner-radius-val');
+        if (l) l.innerText = v + 'px';
+    });
+    bind('brush-size-slider', 'brushSize', parseInt, (v) => {
+        const l = document.getElementById('brush-size-val');
+        if (l) l.innerText = v + 'px';
+    });
+    bind('blend-mode-select', 'blendMode');
+    bind('polygon-sides-slider', 'polygonSides', parseInt, (v) => {
+        const l = document.getElementById('polygon-sides-val');
+        if (l) l.innerText = v;
+        // Special case for polygon sides if we had a polygon shape
+    });
 }
 
 // State Management Helpers (Hoisted for use in init's callbacks)

@@ -14,12 +14,21 @@ export const state = {
 
     // Editor state
     isDrawing: false,
-    isPlaying: false,
     currentTool: 'pen',
     currentColor: '#00ffff',
     brushSize: 1,
     isSymmetryEnabled: false,
     lastCoords: null,
+
+    // Shape Defaults
+    shapeDefaults: {
+        opacity: 1,
+        blendMode: 'source-over',
+        strokeWidth: 0,
+        strokeColor: '#ffffff',
+        cornerRadius: 0,
+        polygonSides: 5
+    },
 
     // Selection & Clipboard
     selectedShape: null,
@@ -50,10 +59,6 @@ export const state = {
     resizeStartX: 0,
     resizeStartDuration: 0,
 
-    // Playback Internals
-    playTimerId: null,
-    playStartTime: 0,
-    playStartOffset: 0,
-    totalDuration: 0,
-    animFrameId: null
+    // Playback state shared
+    isPlaying: false
 };

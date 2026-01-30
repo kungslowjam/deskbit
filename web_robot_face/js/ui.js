@@ -200,6 +200,19 @@ export function updateInteractionEditor() {
     } else {
         if (editor) editor.classList.add('hidden');
         if (shapeExtras) shapeExtras.classList.add('hidden');
+
+        // Revert shared controls to defaults
+        const strokeSlider = getEl('stroke-width-slider');
+        if (strokeSlider) {
+            strokeSlider.value = state.shapeDefaults.strokeWidth || 0;
+            const valEl = getEl('stroke-width-val');
+            if (valEl) valEl.innerText = strokeSlider.value + 'px';
+        }
+
+        const strokeColor = getEl('stroke-color-picker');
+        if (strokeColor) {
+            strokeColor.value = state.shapeDefaults.strokeColor || '#ffffff';
+        }
     }
 }
 

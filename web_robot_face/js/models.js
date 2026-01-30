@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { drawShape } from './renderer.js';
 
 export class Shape {
     constructor(type, x, y, w, h, color) {
@@ -11,16 +12,16 @@ export class Shape {
         this.color = color;
         this.rotation = 0;
 
-        // DOM Access for Defaults (Legacy Compat)
-        this.opacity = parseFloat(document.getElementById('opacity-slider')?.value || 1);
-        this.blendMode = document.getElementById('blend-mode-select')?.value || 'source-over';
+        // Default Properties from State
+        this.opacity = state.shapeDefaults.opacity;
+        this.blendMode = state.shapeDefaults.blendMode;
 
         this.lineEnd = null;
         this.interaction = null;
 
-        this.strokeWidth = parseInt(document.getElementById('stroke-width-slider')?.value || 0);
-        this.strokeColor = document.getElementById('stroke-color-picker')?.value || '#ffffff';
-        this.cornerRadius = parseInt(document.getElementById('corner-radius-slider')?.value || 0);
+        this.strokeWidth = state.shapeDefaults.strokeWidth;
+        this.strokeColor = state.shapeDefaults.strokeColor;
+        this.cornerRadius = state.shapeDefaults.cornerRadius;
 
         this.pathData = null;
         this.nodes = [];
@@ -133,82 +134,7 @@ export class Shape {
     }
 
     draw(context) {
-        context.save();
-        context.globalAlpha = this.opacity;
-        context.globalCompositeOperation = this.blendMode;
-
-        context.fillStyle = this.color;
-        context.strokeStyle = this.strokeColor;
-        context.lineWidth = this.strokeWidth;
-
-        if (this.rotation !== 0) {
-            context.translate(this.x + this.width / 2, this.y + this.height / 2);
-            context.rotate((this.rotation * Math.PI) / 180);
-            context.translate(-(this.x + this.width / 2), -(this.y + this.height / 2));
-        }
-
-        if (this.type === 'rect') {
-            if (this.cornerRadius > 0) {
-                this.drawRoundedRect(context, this.x, this.y, this.width, this.height, this.cornerRadius);
-            } else {
-                context.fillRect(this.x, this.y, this.width, this.height);
-                if (this.strokeWidth > 0) context.strokeRect(this.x, this.y, this.width, this.height);
-            }
-        } else if (this.type === 'ellipse') {
-            context.beginPath();
-            context.ellipse(this.x + this.width / 2, this.y + this.height / 2,
-                Math.abs(this.width / 2), Math.abs(this.height / 2), 0, 0, Math.PI * 2);
-            context.fill();
-            if (this.strokeWidth > 0) context.stroke();
-        } else if (this.type === 'triangle') {
-            context.beginPath();
-            context.moveTo(this.x + this.width / 2, this.y);
-            context.lineTo(this.x, this.y + this.height);
-            context.lineTo(this.x + this.width, this.y + this.height);
-            context.closePath();
-            context.fill();
-            if (this.strokeWidth > 0) context.stroke();
-        } else if (this.type === 'path' && this.pathData) {
-            context.save();
-            const p = new Path2D(this.pathData);
-            if (this.isMirrored) {
-                context.translate(this.x + this.width, this.y);
-                context.scale(-1, 1);
-            } else {
-                context.translate(this.x, this.y);
-            }
-            const scaleX = this.width / 100;
-            const scaleY = this.height / 100;
-            context.scale(scaleX, scaleY);
-            context.fill(p);
-            if (this.strokeWidth > 0) context.stroke(p);
-            context.restore();
-        } else if (this.type === 'line' && this.lineEnd) {
-            context.strokeStyle = this.color;
-            context.lineWidth = Math.max(2, this.strokeWidth);
-            context.beginPath();
-            context.moveTo(this.x, this.y);
-            context.lineTo(this.lineEnd.x, this.lineEnd.y);
-            context.stroke();
-        }
-        context.restore();
-    }
-
-    drawRoundedRect(ctx, x, y, width, height, radius) {
-        radius = Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2);
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height - radius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        ctx.lineTo(x + radius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.closePath();
-        ctx.fill();
-        if (this.strokeWidth > 0) ctx.stroke();
+        drawShape(context, this);
     }
 }
 
@@ -221,17 +147,14 @@ export class TextShape extends Shape {
     }
 
     draw(context) {
-        context.save();
-        context.globalAlpha = this.opacity;
-        context.globalCompositeOperation = this.blendMode;
-        context.fillStyle = this.color;
-        context.font = `${this.fontSize}px Inter, sans-serif`;
-        context.fillText(this.text, this.x, this.y + this.fontSize);
+        drawShape(context, this);
 
+        // Measure Logic (Side Effect - handled here)
+        context.save();
+        context.font = `${this.fontSize}px Inter, sans-serif`;
         const metrics = context.measureText(this.text);
         this.width = metrics.width;
         this.height = this.fontSize * 1.2;
-
         context.restore();
     }
 

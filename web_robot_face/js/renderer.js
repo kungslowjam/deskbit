@@ -208,7 +208,7 @@ export function renderPreview(frameIndex, interpolation = null) {
     pCtx.restore();
 }
 
-function drawShapeProps(ctx, props) {
+export function drawShape(ctx, props) {
     ctx.save();
     ctx.globalAlpha = props.opacity !== undefined ? props.opacity : 1;
     ctx.globalCompositeOperation = props.blendMode || 'source-over';
@@ -226,16 +226,7 @@ function drawShapeProps(ctx, props) {
 
     if (props.type === 'rect') {
         if (props.cornerRadius > 0) {
-            // Basic rounded rect
-            const x = props.x, y = props.y, w = props.width, h = props.height, r = props.cornerRadius;
-            ctx.beginPath();
-            ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
-            ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
-            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
-            ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r);
-            ctx.quadraticCurveTo(x, y, x + r, y);
-            ctx.fill();
-            if (props.strokeWidth > 0) ctx.stroke();
+            drawRoundedRect(ctx, props.x, props.y, props.width, props.height, props.cornerRadius);
         } else {
             ctx.fillRect(props.x, props.y, props.width, props.height);
             if (props.strokeWidth > 0) ctx.strokeRect(props.x, props.y, props.width, props.height);
@@ -244,7 +235,18 @@ function drawShapeProps(ctx, props) {
         ctx.beginPath();
         ctx.ellipse(props.x + props.width / 2, props.y + props.height / 2, Math.abs(props.width / 2), Math.abs(props.height / 2), 0, 0, Math.PI * 2);
         ctx.fill();
+        if (props.strokeWidth > 0) ctx.stroke();
+    } else if (props.type === 'triangle') {
+        ctx.beginPath();
+        ctx.moveTo(props.x + props.width / 2, props.y);
+        ctx.lineTo(props.x, props.y + props.height);
+        ctx.lineTo(props.x + props.width, props.y + props.height);
+        ctx.closePath();
+        ctx.fill();
+        if (props.strokeWidth > 0) ctx.stroke();
     } else if (props.type === 'path' && props.pathData) {
+        ctx.save(); // inner save for scale/translate
+        // We use Path2D which is cleaner
         const p = new Path2D(props.pathData);
         if (props.isMirrored) {
             ctx.translate(props.x + props.width, props.y);
@@ -254,12 +256,51 @@ function drawShapeProps(ctx, props) {
         }
         ctx.scale(props.width / 100, props.height / 100);
         ctx.fill(p);
+        if (props.strokeWidth > 0) ctx.stroke(p);
+        ctx.restore();
+    } else if (props.type === 'line' && props.lineEnd) {
+        // Line logic from models.js
+        ctx.strokeStyle = props.color; // Line uses main color
+        ctx.lineWidth = Math.max(2, props.strokeWidth || 0);
+        ctx.beginPath();
+        ctx.moveTo(props.x, props.y);
+        ctx.lineTo(props.lineEnd.x, props.lineEnd.y);
+        ctx.stroke();
     } else if (props.type === 'text') {
         ctx.font = `${props.fontSize || 16}px Inter, sans-serif`;
         ctx.fillText(props.text || '', props.x, props.y + (props.fontSize || 16));
+
+        // Optional: Measure text if needed, but for drawing just render.
+        // models.js updates width/height here. We won't do it in this pure render function.
     }
-    // ... other types
+
     ctx.restore();
+}
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+    radius = Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+    ctx.fill();
+    // Stroke handled by caller usually, but models.js had it inside?
+    // models.js: drawRoundedRect does fill AND stroke.
+    // caller passes strokeWidth check.
+    // Check usage in drawShape:
+    // ... drawRoundedRect(...)
+    // NO explicit stroke call after it in drawShape.
+    // So drawRoundedRect MUST stroke if needed.
+    // But we don't pass strokeWidth to drawRoundedRect?
+    // Context has it.
+    if (ctx.lineWidth > 0 && ctx.strokeStyle) ctx.stroke();
 }
 
 export function drawCurvePreview() {
@@ -271,16 +312,43 @@ export function drawCurvePreview() {
     const padding = 20;
 
     ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 1; i < 4; i++) {
-        const x = padding + (w - 2 * padding) * (i / 4);
-        const y = padding + (h - 2 * padding) * (i / 4);
+        let x = padding + (w - 2 * padding) * (i / 4);
+        let y = padding + (h - 2 * padding) * (i / 4);
         ctx.moveTo(x, padding); ctx.lineTo(x, h - padding);
         ctx.moveTo(padding, y); ctx.lineTo(w - padding, y);
     }
     ctx.stroke();
 
-    // ... drawing curve logic using applyEasing
+    // Axis
+    ctx.strokeStyle = '#444';
+    ctx.strokeRect(padding, padding, w - 2 * padding, h - 2 * padding);
+
+    // Curve
+    ctx.strokeStyle = '#00d2ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding, h - padding);
+
+    const steps = 50;
+    const graphW = w - 2 * padding;
+    const graphH = h - 2 * padding;
+    const type = document.getElementById('easing-mode')?.value || 'linear';
+
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const val = applyEasing(t, type);
+        // y is inverted in canvas (0 at top)
+        // val 0 -> bottom (h-padding)
+        // val 1 -> top (padding)
+        const x = padding + t * graphW;
+        const y = (h - padding) - val * graphH;
+        ctx.lineTo(x, y);
+    }
+    ctx.stroke();
 }

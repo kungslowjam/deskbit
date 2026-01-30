@@ -361,7 +361,7 @@ export function applyEyePreset(type) {
 
 export function duplicateShape() {
     if (!state.selectedShape) {
-        alert('Select a shape first!'); // showToast?
+        showToast('Select a shape first!');
         return;
     }
     const newShape = state.selectedShape.clone();
