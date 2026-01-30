@@ -113,6 +113,7 @@ export async function importFromJSON(resizeCanvasCallback, updateUIHelpers) {
                 }
             }
 
+            console.log("JSON Parsed, restoring states...", data.states?.length);
             if (data.states && Array.isArray(data.states)) {
                 state.projectStates = data.states.map(stateData => ({
                     id: stateData.id,
@@ -127,7 +128,14 @@ export async function importFromJSON(resizeCanvasCallback, updateUIHelpers) {
                         }
                         if (frameData.shapes) {
                             frame.shapes = frameData.shapes.map(s => {
-                                const shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
+                                // Use TextShape for text type
+                                let shape;
+                                if (s.type === 'text') {
+                                    shape = new TextShape(s.x, s.y, s.text, s.fontSize, s.color);
+                                } else {
+                                    shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
+                                }
+
                                 // Map properties back
                                 shape.opacity = s.opacity ?? 1;
                                 shape.blendMode = s.blendMode || 'source-over';
@@ -151,8 +159,32 @@ export async function importFromJSON(resizeCanvasCallback, updateUIHelpers) {
                 state.activeStateId = data.activeStateId || state.projectStates[0].id;
             } else if (data.frames) {
                 // Legacy v1.0
+                console.log("Detected legacy v1.0 file");
                 const framesList = data.frames.map(frameData => {
                     const frame = new Frame();
+                    // Load pixels and shapes even in legacy
+                    frame.duration = frameData.duration || 100;
+                    if (frameData.pixels) {
+                        frameData.pixels.forEach(p => {
+                            if (p && p.i !== undefined && p.c) frame.pixels[p.i] = p.c;
+                        });
+                    }
+                    if (frameData.shapes) {
+                        frame.shapes = frameData.shapes.map(s => {
+                            if (!s) return null;
+                            let shape;
+                            if (s.type === 'text') {
+                                shape = new TextShape(s.x, s.y, s.text, s.fontSize, s.color);
+                            } else {
+                                shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
+                            }
+                            shape.id = s.id || (Date.now() + Math.random());
+                            // ... simple copy for legacy
+                            Object.assign(shape, s);
+                            if (shape.type === 'path') shape.parsePath();
+                            return shape;
+                        }).filter(sh => sh !== null);
+                    }
                     return frame;
                 });
                 state.projectStates = [{ id: 'idle', name: 'Idle', frames: framesList }];
@@ -170,8 +202,8 @@ export async function importFromJSON(resizeCanvasCallback, updateUIHelpers) {
 
             showToast(`Loaded ${state.projectStates.length} states`);
         } catch (err) {
-            console.error(err);
-            showToast('Failed to load file');
+            console.error("LOAD ERROR:", err);
+            showToast(`Failed to load: ${err.message}`);
         }
     };
     input.click();

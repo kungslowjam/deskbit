@@ -18,6 +18,7 @@
 #include "lvgl.h"
 #include "ui_custom_anim.h" // Use shape_type_t from here
 #include <stdbool.h>
+#include <stdint.h>
 
 // Shape definition for vector animations
 typedef struct {
@@ -29,6 +30,11 @@ typedef struct {
   float x2, y2;      // Extra coords for lines
   const char *text;  // Text content for SHAPE_TEXT
   uint8_t font_size; // Font size for text (8, 12, 16, 20, etc.)
+  float corner_radius;
+  uint32_t stroke_color;
+  float stroke_width;
+  const lv_point_t *path_points;
+  uint16_t path_point_count;
 } anim_shape_t;
 
 // Vector Frame

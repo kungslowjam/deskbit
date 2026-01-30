@@ -6,11 +6,12 @@
 #include "anim_manager.h"
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Object Pool Selection (Increased for complexity)
-#define POOL_SIZE_OBJ 32
-#define POOL_SIZE_LINE 16
+#define POOL_SIZE_OBJ 64
+#define POOL_SIZE_LINE 32
 #define POOL_SIZE_TEXT 12
 
 typedef struct {
@@ -107,6 +108,108 @@ static void ellipse_draw_event_cb(lv_event_t *e) {
   }
 }
 
+// Polygon Scanline Fill Event (With Rotation Support)
+static void polygon_draw_event_cb(lv_event_t *e) {
+  lv_obj_t *obj = (lv_obj_t *)lv_event_get_target(e);
+  lv_draw_ctx_t *draw_ctx = lv_event_get_draw_ctx(e);
+  pool_item_t *item = (pool_item_t *)lv_event_get_user_data(e);
+  const anim_shape_t *s = (const anim_shape_t *)lv_obj_get_user_data(obj);
+
+  if (!item || !s || s->type != 4 || !s->path_points || s->path_point_count < 3)
+    return;
+
+  lv_area_t area;
+  lv_obj_get_coords(obj, &area);
+
+  lv_coord_t w = lv_area_get_width(&area);
+  lv_coord_t h = lv_area_get_height(&area);
+  float cx = area.x1 + w / 2.0f;
+  float cy = area.y1 + h / 2.0f;
+
+  lv_draw_rect_dsc_t draw_dsc;
+  lv_draw_rect_dsc_init(&draw_dsc);
+  draw_dsc.bg_color = lv_color_hex(item->color);
+  draw_dsc.bg_opa = item->opa;
+
+  // Buffer for rotated points (relative to screen)
+  lv_point_t rot_pts[128] = {0};
+  int pt_count = s->path_point_count > 128 ? 128 : s->path_point_count;
+
+  if (pt_count < 3)
+    return;
+
+  // Rotate path points (Match Web Studio's Clockwise rotation)
+  float angle_rad = s->rotation * M_PI / 180.0f;
+  float cos_a = cosf(angle_rad);
+  float sin_a = sinf(angle_rad);
+
+  for (int i = 0; i < pt_count; i++) {
+    // Original points are relative to 0,0 of the bounding box
+    float lx = s->path_points[i].x - (w / 2.0f);
+    float ly = s->path_points[i].y - (h / 2.0f);
+
+    // Standard CW rotation for Y-down
+    float rx = lx * cos_a - ly * sin_a;
+    float ry = lx * sin_a + ly * cos_a;
+
+    rot_pts[i].x = (lv_coord_t)(cx + rx);
+    rot_pts[i].y = (lv_coord_t)(cy + ry);
+  }
+
+  // Find vertical bounds of rotated shape
+  lv_coord_t min_y = rot_pts[0].y;
+  lv_coord_t max_y = rot_pts[0].y;
+  for (int i = 1; i < pt_count; i++) {
+    if (rot_pts[i].y < min_y)
+      min_y = rot_pts[i].y;
+    if (rot_pts[i].y > max_y)
+      max_y = rot_pts[i].y;
+  }
+
+  // Scanline intersections
+  int16_t intersections[128];
+
+  for (lv_coord_t y = min_y; y <= max_y; y++) {
+    int count = 0;
+    for (int i = 0; i < pt_count; i++) {
+      int next = (i + 1) % pt_count;
+      lv_point_t p1 = rot_pts[i];
+      lv_point_t p2 = rot_pts[next];
+
+      if ((p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y)) {
+        if (count < 128) {
+          float intersect_x =
+              (float)p1.x + (float)(y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
+          intersections[count++] = (int16_t)intersect_x;
+        }
+      }
+    }
+
+    // Sort intersections
+    for (int i = 0; i < count; i++) {
+      for (int j = i + 1; j < count; j++) {
+        if (intersections[i] > intersections[j]) {
+          int16_t temp = intersections[i];
+          intersections[i] = intersections[j];
+          intersections[j] = temp;
+        }
+      }
+    }
+
+    // Fill
+    for (int i = 0; i < count; i += 2) {
+      if (i + 1 < count) {
+        lv_area_t strip;
+        strip.y1 = y;
+        strip.y2 = y;
+        strip.x1 = intersections[i];
+        strip.x2 = intersections[i + 1];
+        lv_draw_rect(draw_ctx, &draw_dsc, &strip);
+      }
+    }
+  }
+}
+
 // Maximum animations in registry
 #define MAX_ANIMATIONS 20
 
@@ -138,8 +241,10 @@ static void init_pools(lv_obj_t *parent) {
     lv_obj_set_style_outline_width(obj_pool[i].obj, 0, 0);
     lv_obj_set_style_pad_all(obj_pool[i].obj, 0, 0);
     lv_obj_set_style_shadow_width(obj_pool[i].obj, 0, 0);
-    // Bind event for custom ellipse drawing
+    // Bind events for custom drawing (Ellipse and Polygon)
     lv_obj_add_event_cb(obj_pool[i].obj, ellipse_draw_event_cb,
+                        LV_EVENT_DRAW_MAIN, &obj_pool[i]);
+    lv_obj_add_event_cb(obj_pool[i].obj, polygon_draw_event_cb,
                         LV_EVENT_DRAW_MAIN, &obj_pool[i]);
     obj_pool[i].in_use = false;
   }
@@ -375,7 +480,8 @@ void anim_manager_update(void) {
     float opa = (s1->opacity + (s2->opacity - s1->opacity) * t) * 255.0f;
     float rot = s1->rotation + (s2->rotation - s1->rotation) * t;
 
-    if (s1->type == 0 || s1->type == 1) { // RECT or ELLIPSE
+    if (s1->type == 0 || s1->type == 1 ||
+        s1->type == 4) { // RECT, ELLIPSE, or PATH
       if (obj_idx < POOL_SIZE_OBJ) {
         pool_item_t *item = &obj_pool[obj_idx++];
         lv_obj_t *o = item->obj;
@@ -389,14 +495,25 @@ void anim_manager_update(void) {
         if (s1->type == 0) { // RECT
           lv_obj_set_style_bg_color(o, lv_color_hex(s1->color), 0);
           lv_obj_set_style_bg_opa(o, (uint8_t)opa, 0);
-          lv_obj_set_style_radius(o, 0, 0);
-        } else { // ELLIPSE (Handled by event callback)
+          lv_obj_set_style_radius(o, (lv_coord_t)s1->corner_radius, 0);
+        } else { // ELLIPSE or PATH (Handled by event callback)
           lv_obj_set_style_bg_opa(o, 0, 0);
         }
 
+        // Required for rotation and custom draw events
         lv_obj_set_style_transform_pivot_x(o, (lv_coord_t)(w / 2), 0);
         lv_obj_set_style_transform_pivot_y(o, (lv_coord_t)(h / 2), 0);
         lv_obj_set_style_transform_angle(o, (int16_t)(rot * 10.0f), 0);
+        lv_obj_set_user_data(o, (void *)s1);
+
+        // Apply Stroke
+        if (s1->stroke_width > 0) {
+          lv_obj_set_style_border_width(o, (lv_coord_t)s1->stroke_width, 0);
+          lv_obj_set_style_border_color(o, lv_color_hex(s1->stroke_color), 0);
+          lv_obj_set_style_border_opa(o, (uint8_t)opa, 0);
+        } else {
+          lv_obj_set_style_border_width(o, 0, 0);
+        }
 
         lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
       }
@@ -410,6 +527,8 @@ void anim_manager_update(void) {
       lv_line_set_points(l, pts, 2);
       lv_obj_set_style_line_color(l, lv_color_hex(s1->color), 0);
       lv_obj_set_style_line_opa(l, (uint8_t)opa, 0);
+      lv_obj_set_style_line_width(
+          l, (lv_coord_t)(s1->stroke_width > 0 ? s1->stroke_width : 2), 0);
       lv_obj_clear_flag(l, LV_OBJ_FLAG_HIDDEN);
     } else if (s1->type == 3 && s1->text && text_idx < POOL_SIZE_TEXT) {
       lv_obj_t *lbl = text_pool[text_idx++].obj;

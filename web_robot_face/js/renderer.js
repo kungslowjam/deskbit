@@ -181,14 +181,7 @@ export function renderPreview(frameIndex, interpolation = null) {
 
             if (props) {
                 // Temporary shape to draw
-                // Note: We are not creating a full Shape instance to avoid circular dependency with models or overhead
-                // We just repeat drawing logic or use a helper?
-                // Actually, duplicate drawing logic here is bad.
-                // We should use `Shape.prototype.draw.call(props, pCtx)` but props is a plain object.
-                // `Shape.prototype.draw` expects `this` to have methods depending on type.
-                // It's better to instantiate a Shape or separate the draw logic into a pure function `drawShape(ctx, props)`.
-                // For now, I will duplicate the simple drawing logic to avoid complexity.
-                drawShapeProps(pCtx, props);
+                drawShape(pCtx, props);
             }
         });
     }

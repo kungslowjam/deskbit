@@ -5,6 +5,7 @@ import { updateFrameInfo, updatePlayheadTime } from './ui.js';
 import { saveUndo, serializeFrame, restoreFrame } from './history.js';
 import { applyEasing } from './utils.js';
 import { PIXELS_PER_SEC } from './constants.js';
+import { updatePlayheadPosition } from './playback.js';
 
 // Timeline Elements
 const track = document.getElementById('main-track');
@@ -142,21 +143,6 @@ export function renderTimeline() {
     updatePlayheadPosition();
 }
 
-export function updatePlayheadPosition() {
-    if (!playhead) return;
-
-    let timeMs = 0;
-    if (state.isPlaying) {
-        // Calculated in animate loop
-        return;
-    }
-
-    for (let i = 0; i < state.currentFrameIndex; i++) {
-        timeMs += parseInt(state.frames[i].duration);
-    }
-    const ratio = timeMs / 1000;
-    playhead.style.left = (ratio * PIXELS_PER_SEC) + 'px';
-}
 
 // Frame Operations
 export function addFrame() {
@@ -200,6 +186,3 @@ export function deleteFrame() {
     if (state.actions.renderEditor) state.actions.renderEditor();
 }
 
-// Playback Logic moved to playback.js
-import { updatePlayheadPosition } from './playback.js';
-export { updatePlayheadPosition };

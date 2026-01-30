@@ -18,7 +18,8 @@ typedef enum {
   SHAPE_RECT = 0,
   SHAPE_ELLIPSE = 1,
   SHAPE_LINE = 2,
-  SHAPE_TEXT = 3 // Text label (rendered via lv_label)
+  SHAPE_TEXT = 3, // Text label (rendered via lv_label)
+  SHAPE_PATH = 4  // SVG-like Path (rendered as polygon)
 } shape_type_t;
 
 // Shape keyframe structure (must match export)

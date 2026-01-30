@@ -1,0 +1,35 @@
+{
+  "version": "1.1",
+  "width": 128,
+  "height": 128,
+  "fps": 12,
+  "easingMode": "linear",
+  "activeStateId": "idle",
+  "states": [
+    {
+      "id": "idle",
+      "name": "Idle",
+      "frames": [
+        {
+          "index": 0,
+          "duration": 100,
+          "pixels": [],
+          "shapes": [
+            {
+              "type": "rect",
+              "x": 10,
+              "y": 10,
+              "width": 50,
+              "height": 50,
+              "color": "#ff0000",
+              "opacity": 1,
+              "blendMode": "source-over",
+              "rotation": 0,
+              "id": 12345
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

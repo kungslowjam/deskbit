@@ -38,6 +38,115 @@ def blend_colors(bg_rgb, fg_rgb, opacity):
     b = int(bg_rgb[2] * (1 - opacity) + fg_rgb[2] * opacity)
     return (r, g, b)
 
+def flatten_svg_path(path_data, w, h):
+    """Flatten SVG path (M, L, Q, C, Z) into a list of points scaled to w/h. Supports absolute and relative commands."""
+    import re
+    if not path_data: return []
+    # Tokenize: find commands and numbers
+    tokens = re.findall(r'[A-Za-z]|[-+]?\d*\.?\d+', path_data)
+    
+    points = []
+    curr_p = [0.0, 0.0]
+    start_p = [0.0, 0.0]
+    
+    segments_c = 24
+    segments_q = 16
+    
+    it = iter(tokens)
+    while True:
+        try:
+            token = next(it)
+            if not token: break
+            
+            # Move To
+            if token == 'M':
+                curr_p = [float(next(it)), float(next(it))]
+                start_p = list(curr_p)
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+            elif token == 'm':
+                curr_p[0] += float(next(it))
+                curr_p[1] += float(next(it))
+                start_p = list(curr_p)
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+            
+            # Line To
+            elif token == 'L':
+                curr_p = [float(next(it)), float(next(it))]
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+            elif token == 'l':
+                curr_p[0] += float(next(it))
+                curr_p[1] += float(next(it))
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+            
+            # Quadratic Bezier
+            elif token == 'Q':
+                x1, y1 = float(next(it)), float(next(it))
+                x, y = float(next(it)), float(next(it))
+                for i in range(1, segments_q + 1):
+                    t = i / float(segments_q)
+                    px = (1-t)**2 * curr_p[0] + 2*(1-t)*t * x1 + t**2 * x
+                    py = (1-t)**2 * curr_p[1] + 2*(1-t)*t * y1 + t**2 * y
+                    points.append((px * w / 100.0, py * h / 100.0))
+                curr_p = [x, y]
+            elif token == 'q':
+                x1, y1 = curr_p[0] + float(next(it)), curr_p[1] + float(next(it))
+                x, y = curr_p[0] + float(next(it)), curr_p[1] + float(next(it))
+                for i in range(1, segments_q + 1):
+                    t = i / float(segments_q)
+                    px = (1-t)**2 * curr_p[0] + 2*(1-t)*t * x1 + t**2 * x
+                    py = (1-t)**2 * curr_p[1] + 2*(1-t)*t * y1 + t**2 * y
+                    points.append((px * w / 100.0, py * h / 100.0))
+                curr_p = [x, y]
+                
+            # Cubic Bezier
+            elif token == 'C':
+                x1, y1 = float(next(it)), float(next(it))
+                x2, y2 = float(next(it)), float(next(it))
+                x, y = float(next(it)), float(next(it))
+                for i in range(1, segments_c + 1):
+                    t = i / float(segments_c)
+                    px = (1-t)**3 * curr_p[0] + 3*(1-t)**2*t * x1 + 3*(1-t)*t**2 * x2 + t**3 * x
+                    py = (1-t)**3 * curr_p[1] + 3*(1-t)**2*t * y1 + 3*(1-t)*t**2 * y2 + t**3 * y
+                    points.append((px * w / 100.0, py * h / 100.0))
+                curr_p = [x, y]
+            elif token == 'c':
+                x1, y1 = curr_p[0] + float(next(it)), curr_p[1] + float(next(it))
+                x2, y2 = curr_p[0] + float(next(it)), curr_p[1] + float(next(it))
+                x, y = curr_p[0] + float(next(it)), curr_p[1] + float(next(it))
+                for i in range(1, segments_c + 1):
+                    t = i / float(segments_c)
+                    px = (1-t)**3 * curr_p[0] + 3*(1-t)**2*t * x1 + 3*(1-t)*t**2 * x2 + t**3 * x
+                    py = (1-t)**3 * curr_p[1] + 3*(1-t)**2*t * y1 + 3*(1-t)*t**2 * y2 + t**3 * y
+                    points.append((px * w / 100.0, py * h / 100.0))
+                curr_p = [x, y]
+                
+            # Horizontal Line
+            elif token == 'H':
+                curr_p[0] = float(next(it))
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+            elif token == 'h':
+                curr_p[0] += float(next(it))
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+                
+            # Vertical Line
+            elif token == 'V':
+                curr_p[1] = float(next(it))
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+            elif token == 'v':
+                curr_p[1] += float(next(it))
+                points.append((curr_p[0] * w / 100.0, curr_p[1] * h / 100.0))
+                
+            # Close Path
+            elif token in 'Zz':
+                if points and (abs(points[-1][0] - start_p[0] * w / 100.0) > 0.1 or abs(points[-1][1] - start_p[1] * h / 100.0) > 0.1):
+                    points.append((start_p[0] * w / 100.0, start_p[1] * h / 100.0))
+                curr_p = list(start_p)
+                
+        except (StopIteration, ValueError):
+            break
+            
+    return points
+
 def render_shape_to_pixels(pixels, shape, width, height):
     """Render a shape object to the pixel array"""
     if not shape or 'type' not in shape:
@@ -223,19 +332,13 @@ def interpolate_shape(shape1, shape2, t):
     result = shape1.copy()
     
     # Interpolate numeric properties
-    for prop in ['x', 'y', 'width', 'height', 'rotation', 'opacity']:
-        v1 = shape1.get(prop, 0)
+    for prop in ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'cornerRadius', 'strokeWidth', 'fontSize']:
+        v1 = shape1.get(prop)
         v2 = shape2.get(prop, v1)
         if v1 is not None and v2 is not None:
             result[prop] = lerp(float(v1), float(v2), t)
     
-    # Keep non-interpolated properties from shape1
-    result['type'] = shape1.get('type')
-    result['color'] = shape1.get('color')
-    result['id'] = shape1.get('id')
-    result['lineEnd'] = shape1.get('lineEnd')
-    
-    # Interpolate lineEnd if both have it
+    # Interpolate lineEnd if present
     le1 = shape1.get('lineEnd')
     le2 = shape2.get('lineEnd')
     if isinstance(le1, dict) and isinstance(le2, dict):
@@ -243,6 +346,31 @@ def interpolate_shape(shape1, shape2, t):
             'x': lerp(float(le1.get('x', 0)), float(le2.get('x', 0)), t),
             'y': lerp(float(le1.get('y', 0)), float(le2.get('y', 0)), t)
         }
+    
+    # Keep non-interpolated properties from shape1
+    result['type'] = shape1.get('type')
+    result['color'] = shape1.get('color')
+    result['id'] = shape1.get('id')
+    
+    # Path Morphing: Interpolate flattened points if both have pathData
+    if shape1.get('type') == 'path' and shape2.get('type') == 'path':
+        pd1 = shape1.get('pathData', '')
+        pd2 = shape2.get('pathData', '')
+        # Use a reference width/height for flattening consistency (100x100)
+        pts1 = flatten_svg_path(pd1, 100, 100)
+        pts2 = flatten_svg_path(pd2, 100, 100)
+        
+        if len(pts1) == len(pts2) and len(pts1) > 0:
+            interp_pts = []
+            for i in range(len(pts1)):
+                ix = lerp(pts1[i][0], pts2[i][0], t)
+                iy = lerp(pts1[i][1], pts2[i][1], t)
+                interp_pts.append((ix, iy))
+            result['flattenedPoints'] = interp_pts
+        else:
+            result['pathData'] = pd1 if t < 0.5 else pd2
+    elif 'pathData' in shape1:
+        result['pathData'] = shape1['pathData']
     
     return result
 
@@ -316,7 +444,7 @@ def bake_animation_frames(frames, width, height, target_fps=30):
     print(f"   Generated {len(baked_frames)} interpolated frames")
     return baked_frames
 
-def generate_c_file(json_data, output_dir):
+def generate_c_file(json_data, output_dir, suggested_name='exported_anim'):
     """Generate C file from JSON animation data (supports Multiple States)"""
     
     width = json_data.get('width', 466)
@@ -332,97 +460,109 @@ def generate_c_file(json_data, output_dir):
         print("❌ No states found in JSON!")
         return None
     
-    anim_name = json_data.get('name', 'exported_anim')
-    
-    # Get animation name
-    if 'name' in json_data and json_data['name']:
-        anim_name = json_data['name']
-    else:
-        # Ask user for animation name (Only if not provided automatically)
-        anim_name = "exported_anim"
-        try:
-            print(f"Animation name (default: {anim_name}): ", end='')
-            # Flush stdout to ensure prompt appears
-            sys.stdout.flush() 
-            # Check if stdin is interactive before asking
-            if sys.stdin.isatty():
-                user_name = input().strip()
-                if user_name:
-                    anim_name = user_name
-        except Exception:
-            pass # Keep default if input fails
-
+    anim_name = json_data.get('name') or suggested_name
     # Sanitize name
-    anim_name = anim_name.replace(' ', '_').lower()
+    anim_name = anim_name.replace(' ', '_').replace('.json', '').lower()
 
-    # Easing is stored as numeric enum in anim_vector_frame_t
-    global_easing = 0  # Linear
-    
+    # Selection logic for Multiple States
+    active_state_id = json_data.get('activeStateId')
+    selected_state = None
+    if 'states' in json_data:
+        for st in json_data['states']:
+            if st.get('id') == active_state_id:
+                selected_state = st
+                break
+        if selected_state is None:
+            selected_state = json_data['states'][0]
+    else:
+        selected_state = {'frames': json_data.get('frames', [])}
+
+    frames = selected_state.get('frames', [])
+
+    # Support Easing mapping
+    easing_map = {'linear': 0, 'ease-in': 1, 'ease-out': 2, 'ease-in-out': 3, 'overshoot': 4, 'bounce': 5}
+    easing_str = selected_state.get('easingMode') or json_data.get('easingMode', 'linear')
+    global_easing = easing_map.get(easing_str.lower(), 0)
+
     print(f"DEBUG: Generating C file for {anim_name} (Updated Version)")
-
     output_c_content = f'#include "anim_manager.h"\n#include "lvgl.h"\n\n'
     
-    # Define mapping from string type to enum (ui_custom_anim.h)
     type_map = {
         'rect': 'SHAPE_RECT',
         'ellipse': 'SHAPE_ELLIPSE',
         'line': 'SHAPE_LINE',
         'text': 'SHAPE_TEXT',
-        # Editor path objects are not supported in firmware yet.
-        # Export as ellipse to keep build working.
-        'path': 'SHAPE_ELLIPSE'
+        'path': 'SHAPE_PATH'
     }
 
-    # Pick the active state (or fallback to the first)
-    active_state_id = json_data.get('activeStateId')
-    selected_state = None
-    if active_state_id:
-        for st in states_data:
-            if st.get('id') == active_state_id:
-                selected_state = st
-                break
-    if selected_state is None:
-        selected_state = states_data[0]
-
-    frames = selected_state.get('frames', [])
-
-    # Bake frames for this state
-    if len(frames) >= 2 and any(f.get('shapes') for f in frames):
-        target_fps = json_data.get('fps', 20)
-        frames = bake_animation_frames(frames, width, height, target_fps)
+    # Note: Baking is DISABLED for vector animations to allow smooth C-side interpolation
+    # Each frame will now act as a true keyframe.
 
     # Generate Frame-by-Frame Shape Arrays
     frame_vars = []
     for f_idx, frame in enumerate(frames):
         shapes = frame.get('shapes', []) or []
         frame_var = f"{anim_name}_f{f_idx}_shapes"
-        if shapes:
+        
+        # Pre-generate path points for this frame
+        frame_path_arrays = ""
+        shape_configs = []
+        
+        for s_idx, s in enumerate(shapes):
+            if not isinstance(s, dict): continue
+            stype = s.get('type', 'rect')
+            t = type_map.get(stype, 'SHAPE_RECT')
+            
+            points_var = "NULL"
+            points_count = 0
+            
+            if t == 'SHAPE_PATH':
+                sw = s.get('width', 100)
+                sh = s.get('height', 100)
+                
+                # Check if we already have interpolated points from the baker
+                if 'flattenedPoints' in s:
+                    # Scaling: baked points were at 100x100, scale to sw/sh
+                    pts = [(px * sw / 100.0, py * sh / 100.0) for px, py in s['flattenedPoints']]
+                else:
+                    path_data = s.get('pathData', '')
+                    pts = flatten_svg_path(path_data, sw, sh)
+                
+                if pts:
+                    points_var = f"{anim_name}_f{f_idx}_s{s_idx}_pts"
+                    frame_path_arrays += f"static const lv_point_t {points_var}[] = {{\n"
+                    for px, py in pts:
+                        frame_path_arrays += f"    {{ {int(px)}, {int(py)} }},\n"
+                    frame_path_arrays += "};\n"
+                    points_count = len(pts)
+            
+            # Collect data for the main array
+            x, y = s.get('x', 0), s.get('y', 0)
+            w, h = s.get('width', 0), s.get('height', 0)
+            rot = s.get('rotation', 0)
+            opacity = s.get('opacity', 1.0)
+            color_value = s.get('color') or '#FFFFFF'
+            color_hex = str(color_value).replace('#', '0x')
+            le = s.get('lineEnd') or {}
+            x2, y2 = le.get('x', 0), le.get('y', 0)
+            text_raw = s.get('text', '')
+            text = str(text_raw if text_raw is not None else '').replace('\\', '\\\\').replace('"', '\\"')
+            fs = s.get('fontSize', 14)
+            cr = s.get('cornerRadius', 0)
+            sw_stroke = s.get('strokeWidth', 0)
+            sc_val = s.get('strokeColor') or '#FFFFFF'
+            sc_hex = str(sc_val).replace('#', '0x')
+
+            text_field = f"\"{text}\"" if t == 'SHAPE_TEXT' else 'NULL'
+            
+            shape_configs.append(f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, {text_field}, {fs}, {cr:.2f}f, {sc_hex}, {sw_stroke:.2f}f, {points_var}, {points_count} }}')
+
+        if shape_configs:
+            output_c_content += frame_path_arrays
             output_c_content += f"static const anim_shape_t {frame_var}[] = {{\n"
-            for s in shapes:
-                if not isinstance(s, dict):
-                    continue
-                t = type_map.get(s.get('type'), 'SHAPE_RECT')
-                x, y = s.get('x', 0), s.get('y', 0)
-                w, h = s.get('width', 0), s.get('height', 0)
-                rot = s.get('rotation', 0)
-                opacity = s.get('opacity', 1.0)
-                color_value = s.get('color') or '#FFFFFF'
-                color_hex = str(color_value).replace('#', '0x')
-
-                le = s.get('lineEnd') or {}
-                if not isinstance(le, dict):
-                    le = {}
-                x2, y2 = le.get('x', 0), le.get('y', 0)
-
-                text_raw = s.get('text', '')
-                text = (text_raw if text_raw is not None else '')
-                text = str(text).replace('\\', '\\\\').replace('"', '\\"')
-                fs = s.get('fontSize', 14)
-
-                text_field = f"\"{text}\"" if t == 'SHAPE_TEXT' else 'NULL'
-                output_c_content += f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, {text_field}, {fs} }},\n'
-            output_c_content += "};\n\n"
-            frame_vars.append({'var': frame_var, 'count': len(shapes), 'dur': frame.get('duration', 100)})
+            output_c_content += ",\n".join(shape_configs)
+            output_c_content += "\n};\n\n"
+            frame_vars.append({'var': frame_var, 'count': len(shape_configs), 'dur': frame.get('duration', 100)})
         else:
             frame_vars.append({'var': 'NULL', 'count': 0, 'dur': frame.get('duration', 100)})
 
@@ -609,7 +749,7 @@ def main():
     if not anim_dir.exists(): anim_dir.mkdir(parents=True)
     
     # Generate
-    anim_name = generate_c_file(json_data, anim_dir)
+    anim_name = generate_c_file(json_data, anim_dir, json_file.name)
     if anim_name:
         generate_h_file(anim_name, anim_dir)
         update_cmake(anim_name, user_app_dir / "CMakeLists.txt")
