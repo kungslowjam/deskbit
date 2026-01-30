@@ -256,6 +256,17 @@ static float current_eye_w = EYE_WIDTH;
 static float current_eye_h = EYE_HEIGHT;
 #define SIZE_LERP 0.2f // Higher = Faster/More responsive, Lower = Smoother
 
+// Forward Declarations for Static Functions
+static void fade_out_normal_eyes(void);
+static void hide_happy(void);
+static void hide_sad(void);
+static void hide_laugh(void);
+static void hide_love(void);
+static void hide_sleep(void);
+static void hide_angry(void);
+static void show_idle(void);
+static void do_blink(void);
+
 // -----------------------------------------------------------------------------
 // Physics & Animation Helpers
 // -----------------------------------------------------------------------------
@@ -538,18 +549,32 @@ static void update_positions(void) {
   // ==========================================
   anim_manager_update();
 
-  // Auto-blink test (Every ~3 seconds)
-  static uint32_t last_anim_test = 0;
-  if (lv_tick_get() - last_anim_test > 3000) {
-    if (!anim_manager_is_playing() && current_emotion == EMO_IDLE) {
-      // Play blink animation if idle
-      // anim_manager_play("blink", 1); // Fixed: blink removed, use my or skip
-      // fallback to procedural blink or just skip if no anim
-      // do_some_procedural_blink();
+  // Detect if Web/Custom Animation is playing to hide built-in eyes
+  static bool was_anim_playing = false;
+  bool is_anim_playing = anim_manager_is_playing();
+
+  if (is_anim_playing) {
+    if (!was_anim_playing) {
+      // Transition to Custom Mode: Hide all built-in UI elements
+      fade_out_normal_eyes();
+      hide_happy();
+      hide_sad();
+      hide_laugh();
+      hide_love();
+      hide_sleep();
+      hide_angry();
+      current_emotion = EMO_CUSTOM;
+      timer_ms = 0;
     }
-    last_anim_test = lv_tick_get();
+    was_anim_playing = true;
+    return; // SKIP PROCEDURAL EYE LOGIC
+  } else if (was_anim_playing) {
+    // Just finished custom animation, return to normal
+    show_idle();
+    current_emotion = EMO_IDLE;
+    timer_ms = 0;
+    was_anim_playing = false;
   }
-  // ==========================================
 
   // Global Breathe Wave (used by Normal, Happy, Sleep)
   float breath_rad = breath_phase * 0.01745f;
@@ -1656,8 +1681,8 @@ static void main_loop(lv_timer_t *timer) {
 
   // Random Blink
   blink_timer += 50;
-  if (current_emotion != EMO_LAUGH &&
-      current_emotion != EMO_LOVE) { // Shake/Love overrides blink
+  if (current_emotion != EMO_LAUGH && current_emotion != EMO_LOVE &&
+      current_emotion != EMO_CUSTOM) { // Shake/Love/Custom overrides blink
     if (blink_timer >= next_blink_time) {
       blink_timer = 0;
       do_blink();
