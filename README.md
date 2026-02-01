@@ -1,163 +1,176 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C6 | ESP32-H2 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | -------- | -------- |
+# 🤖 DeskBit - Desktop Companion Robot
 
-| Supported LCD Controllers | SPD2010 | GC9B71 | SH8601 |
-| ------------------------- | ------- | ------ | ------ |
+<div align="center">
 
-# Waveshare ESP32-S3 Touch AMOLED 1.43" - Robot Eyes Project
+![DeskBit Logo](readme/620191051_25770710362555522_3038655505199516088_n.jpg)
 
-## 📋 Product Features
+**DeskBit** คืออุปกรณ์ Desktop Companion ขนาดเล็กที่มาพร้อมหน้าจอ AMOLED กลม 1.43 นิ้ว
+ออกแบบมาเพื่อเป็นเพื่อนคู่ใจบนโต๊ะทำงานของคุณ พร้อมฟีเจอร์สุดน่ารักและมีประโยชน์!
 
-This product adopts **ESP32-S3R8** chip with 2.4GHz WiFi and Bluetooth BLE 5 support, integrates high-capacity Flash and PSRAM. Onboard **1.43inch AMOLED display** which can smoothly run GUI programs such as LVGL. Onboard rich peripheral resources such as RTC chip, QMI8658 6-axis IMU, TF card slot, Lithium battery header, etc., and reserved USB, UART, I2C and GPIO pin headers, offering strong compatibility and expandability. It is suitable for the quick development of HMI and other ESP32-S3 applications.
+[![ESP32-S3](https://img.shields.io/badge/MCU-ESP32--S3-blue?style=for-the-badge&logo=espressif)](https://www.espressif.com/)
+[![LVGL](https://img.shields.io/badge/GUI-LVGL-brightgreen?style=for-the-badge)](https://lvgl.io/)
+[![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red?style=for-the-badge)]()
 
-### 🚀 Key Features
+### 🎬 Demo Video
 
-- ⚡ **High-performance Xtensa 32-bit LX7 dual-core processor**, up to **240MHz** main frequency
-- 📶 Supports **2.4GHz Wi-Fi (802.11 b/g/n)** and **Bluetooth 5 (LE)**, with onboard antenna. Supports switching to use external antenna via resoldering an onboard resistor
-- 💾 Built-in **512KB SRAM** and **384KB ROM**, with onboard **16MB Flash** and **8MB PSRAM**
-- 🖥️ Onboard **1.43inch AMOLED display**, QSPI interface, **466 × 466 resolution**, **16.7M colors**
-- 👆 Supports **capacitive touch** function controlled via I2C interface
-- 🎯 Onboard **QMI8658 6-axis IMU** (3-axis accelerometer and 3-axis gyroscope) for detecting motion gestures, counting steps, etc.
-- 🕐 Onboard **PCF85063 RTC chip** with reserved SH1.0 RTC battery header (supports charging) for RTC function requirement
-- 🔘 Onboard RST button and programmable BOOT button for easy custom function development
-- 🔋 Onboard **3.7V MX1.25 Lithium battery** recharge/discharge header
-- 💿 Onboard **TF card slot** for external TF card storage of pictures or files
-- 🔌 Onboard **USB Type-C** port for power supply, program downloading, and debugging
-- 📌 Onboard UART and I2C SH1.0 4PIN connector, reserved **2 × 14PIN 1.27mm pitch headers**, adapting multiple GPIO interfaces
-- 🎨 Optional CNC metal case, with clear and colorful label on the back
+[![DeskBit Demo](https://img.youtube.com/vi/HIJs3vWXdCQ/0.jpg)](https://www.youtube.com/watch?v=HIJs3vWXdCQ)
+
+▶️ **[ดูวิดีโอ Demo บน YouTube](https://www.youtube.com/watch?v=HIJs3vWXdCQ)**
+
+</div>
 
 ---
 
-## 📊 AMOLED Display Specifications
+## ✨ คุณสมบัติหลัก (Main Features)
 
-| Parameter | Specification |
-|-----------|---------------|
-| **Display Panel** | AMOLED |
-| **Display Size** | 1.43 inch |
-| **Resolution** | 466 × 466 |
-| **Display Colors** | 16.7M |
-| **Brightness** | 350 cd/㎡ |
-| **Contrast Ratio** | 60000:1 |
-| **Communication Interface** | QSPI |
-| **Driver IC** | **SH8601** |
-| **Touch** | Supported |
-| **Touch IC** | **FT3168** |
+### 🎭 Robot Eyes - ดวงตาหุ่นยนต์สุดน่ารัก
+<div align="center">
+
+![Robot Eyes](readme/622279751_1862890687678989_1698581453543050712_n.jpg)
+
+</div>
+
+- **อารมณ์หลากหลาย**: แสดงอารมณ์ได้มากมาย เช่น Happy, Love, Angry, Sleep, Laugh และอื่นๆ
+- **Animation ลื่นไหล**: ใช้ระบบ Physics-based animation ทำให้ดวงตาเคลื่อนไหวเหมือนมีชีวิต
+- **Gaze System**: ดวงตาสามารถมองไปรอบๆ ได้อย่างเป็นธรรมชาติ
+- **Blink Animation**: กระพริบตาอัตโนมัติแบบ Random
+- **Love Mode**: ดวงตาเป็นรูปหัวใจสีชมพู 💕
 
 ---
 
-## 🔧 Technical Specifications Summary
+### 🍅 Pomodoro Timer - ตัวจับเวลา Pomodoro
+
+- **Session แบบปรับได้**: ตั้งเวลาทำงานได้ตั้งแต่ 1-60 นาที
+- **Break แบบปรับได้**: ตั้งเวลาพักได้ตั้งแต่ 1-30 นาที
+- **UI สวยงาม**: แสดง Progress Arc พร้อม Animation
+- **บันทึกการตั้งค่า**: จดจำค่าที่ตั้งไว้แม้ปิดเครื่อง (NVS)
+
+---
+
+### ⚙️ Settings - หน้าจอตั้งค่า
+<div align="center">
+
+![Settings](readme/622422010_699211289822924_7182381935930133792_n.jpg)
+
+</div>
+
+- **🔆 Brightness Control**: ปรับความสว่างหน้าจอได้ 0-100%
+- **📶 WiFi Manager**: 
+  - สแกนหา WiFi โดยรอบ
+  - เชื่อมต่อ WiFi พร้อม Password Dialog
+  - แสดงสถานะการเชื่อมต่อและ IP Address
+  - บันทึก WiFi ที่เชื่อมต่อไว้
+- **💾 NVS Storage**: บันทึกการตั้งค่าทั้งหมดลง Flash Memory
+
+---
+
+## 🛠️ Hardware Specification
 
 | Component | Specification |
 |-----------|---------------|
 | **MCU** | ESP32-S3R8 (Dual-core LX7 @ 240MHz) |
-| **Wi-Fi** | 802.11 b/g/n (2.4GHz) |
-| **Bluetooth** | BLE 5.0 |
+| **Display** | 1.43" AMOLED, 466×466, 16.7M colors |
+| **Touch** | Capacitive Touch (FT3168) |
 | **RAM** | 512KB SRAM + 8MB PSRAM |
 | **Flash** | 16MB |
-| **Display** | 1.43" AMOLED, 466×466, 16.7M colors |
-| **Touch** | Capacitive (FT3168) |
-| **IMU** | QMI8658 (6-axis) |
+| **IMU** | QMI8658 (6-axis Accelerometer/Gyroscope) |
 | **RTC** | PCF85063 |
+| **Connectivity** | WiFi 802.11 b/g/n + Bluetooth 5.0 |
 | **Storage** | TF Card Slot |
 | **Battery** | 3.7V Li-ion (MX1.25 connector) |
 | **USB** | Type-C |
 
 ---
 
-# QSPI LCD (with RAM) and Touch Panel Example
-
-[esp_lcd](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/lcd.html) provides several panel drivers out-of box, e.g. ST7789, SSD1306, NT35510. However, there're a lot of other panels on the market, it's beyond `esp_lcd` component's responsibility to include them all.
-
-`esp_lcd` allows user to add their own panel drivers in the project scope (i.e. panel driver can live outside of esp-idf), so that the upper layer code like LVGL porting code can be reused without any modifications, as long as user-implemented panel driver follows the interface defined in the `esp_lcd` component.
-
-This example shows how to use SPD1020, GC9B71 or SH8601 display driver from Component manager in esp-idf project. These components are using API provided by `esp_lcd` component. This example will draw a fancy dash board with the LVGL library.
-
-This example uses the [esp_timer](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html) to generate the ticks needed by LVGL and uses a dedicated task to run the `lv_timer_handler()`. Since the LVGL APIs are not thread-safe, this example uses a mutex which be invoked before the call of `lv_timer_handler()` and released after it. The same mutex needs to be used in other tasks and threads around every LVGL (lv_...) related function call and code. For more porting guides, please refer to [LVGL porting doc](https://docs.lvgl.io/master/porting/index.html).
-
-## Touch controller
-
-In this example you can enable touch controller SPD2010 or CST816 connected via I2C.
-
-## How to use the example
-
-### Hardware Required
-
-* An ESP development board
-* A SPD1020, GC9B71 or SH8601 LCD panel, with QSPI interface (with/without touch)
-* An USB cable for power supply and programming
-
-### Hardware Connection
-
-The connection between ESP Board and the LCD is as follows:
+## 📁 Project Structure
 
 ```
-       ESP Board                SPD1020, GC9B71 or SH8601 Panel (QSPI)
-┌──────────────────────┐              ┌────────────────────┐
-│             GND      ├─────────────►│ GND                │
-│                      │              │                    │
-│             3V3      ├─────────────►│ VCC                │
-│                      │              │                    │
-│             CS       ├─────────────►│ CS                 │
-│                      │              │                    │
-│             SCK      ├─────────────►│ CLK                │
-│                      │              │                    │
-│             D3       ├─────────────►│ IO3                │
-│                      │              │                    │
-│             D2       ├─────────────►│ IO2                │
-│                      │              │                    │
-│             D1       ├─────────────►│ IO1                │
-│                      │              │                    │
-│             D0       ├─────────────►│ IO0                │
-│                      │              │                    │
-│             RST      ├─────────────►│ RSTN               │
-│                      │              │                    │
-│             (SCL)    ├─────────────►│ TP_SCL             │
-│                      │              │                    │
-│             (SDA)    ├─────────────►│ TP_SDA             │
-│                      │              │                    │
-│             (TP_INT) ├─────────────►│ TP_INT             │
-│                      │              │                    │
-│             (3V3)    ├─────────────►│ TP_RST             │
-│                      │              │                    │
-└──────────────────────┘              └────────────────────┘
+deskbit/
+├── main/                      # Main application entry
+│   └── app_main.c            # Application main
+├── components/               
+│   ├── user_app/              # Main UI components
+│   │   ├── ui_robo_eyes.c     # Robot eyes animation engine
+│   │   ├── ui_settings.c      # Settings & Pomodoro UI
+│   │   ├── ui_custom_anim.c   # Custom animation player
+│   │   └── anim_manager.c     # Animation management system
+│   ├── esp_wifi_bsp/          # WiFi driver
+│   ├── touch_bsp/             # Touch driver
+│   ├── pcf85063/              # RTC driver
+│   ├── qmi8658c/              # IMU driver
+│   └── lvgl/                  # LVGL graphics library
+├── web_robot_face/            # Web-based Robot Face Studio
+│   ├── index.html             # Web animation editor
+│   ├── bridge_server.py       # ESP32 communication bridge
+│   └── export_to_project.py   # Export animations to C code
+└── readme/                    # Documentation images
 ```
 
-The GPIO number used by this example can be changed in [example_qspi_with_ram.c](main/example_qspi_with_ram.c).
-Especially, please pay attention to the level used to turn on the LCD backlight, some LCD module needs a low level to turn it on, while others take a high level. You can change the backlight level macro `EXAMPLE_LCD_BK_LIGHT_ON_LEVEL` in [example_qspi_with_ram.c](main/example_qspi_with_ram.c).
-The LCD vendor specific initialization can be different between manufacturers and should consult the LCD supplier for initialization sequence code.
+---
 
-### Build and Flash
+## 🎨 Robot Eyes Expressions
 
-Run `idf.py -p PORT build flash monitor` to build, flash and monitor the project. A fancy animation will show up on the LCD as expected.
+DeskBit สามารถแสดงอารมณ์ได้หลากหลาย:
 
-The first time you run `idf.py` for the example will cost extra time as the build system needs to address the component dependencies and downloads the missing components from registry into `managed_components` folder.
+| Expression | Description |
+|------------|-------------|
+| 😊 **Happy** | ตาโค้งยิ้ม + แก้มแดง + ปากยิ้ม |
+| 😍 **Love** | ดวงตาเป็นรูปหัวใจสีชมพู |
+| 😠 **Angry** | คิ้วเฉียง + สั่นเล็กน้อย |
+| 😴 **Sleep** | ตาปิด + ตัว Z ลอยขึ้น |
+| 😂 **Laugh** | ตาหยี + ปากเปิดกว้าง + สั่นตัว |
+| 😐 **Idle** | ดวงตาปกติ + กระพริบตาอัตโนมัติ |
 
-(To exit the serial monitor, type ``Ctrl-]``.)
+---
 
-See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for full steps to configure and use ESP-IDF to build projects.
+## 🚀 Quick Start
 
-### Example Output
+### 1. Build & Flash
 
 ```bash
-...
-I (415) example: Turn off LCD backlight
-I (420) gpio: GPIO[0]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
-I (429) example: Initialize SPI bus
-I (434) example: Install panel IO
-I (438) example: Install SPD2010 panel driver
-I (442) gpio: GPIO[17]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
-I (452) spd2010: LCD panel create success, version: 0.0.1
-I (741) example: Turn on LCD backlight
-I (741) example: Initialize LVGL library
-I (741) example: Register display driver to LVGL
-I (746) example: Install LVGL tick timer
-I (748) example: Starting LVGL task
-I (795) example: Display LVGL demos
-I (1038) main_task: Returned from app_main()
-...
+# Set up ESP-IDF environment
+. $HOME/esp/esp-idf/export.sh
+
+# Build the project
+idf.py build
+
+# Flash to device
+idf.py -p COM3 flash monitor
 ```
 
-## Troubleshooting
+### 2. Web Robot Face Studio
 
-For any technical queries, please open an [issue] (https://github.com/espressif/esp-iot-solution/issues) on GitHub. We will get back to you soon.
-"# esp32-robot-eyes" 
+```bash
+cd web_robot_face
+
+# Start the editor
+start index.html
+
+# OR start with bridge server (for live preview on device)
+python bridge_server.py
+```
+
+---
+
+## 📱 Coming Soon
+
+- 🔔 **Notification Support**: แจ้งเตือนจาก PC/Mobile
+- 🗣️ **Voice Commands**: สั่งงานด้วยเสียง
+- 📊 **Desktop Stats**: แสดงสถิติ CPU/RAM
+- 🎮 **Mini Games**: เกมเล็กๆ เล่นผ่อนคลาย
+
+---
+
+## 📜 License
+
+This project is for personal/educational use.
+
+---
+
+<div align="center">
+
+### Made with ❤️ for Desktop Companions
+
+**DeskBit** - Your Cute Desk Buddy! 🤖
+
+</div>
