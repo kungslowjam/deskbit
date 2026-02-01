@@ -941,6 +941,7 @@ static void fade_out_normal_eyes(void) {
   lv_anim_set_var(&a, right_eye);
   lv_anim_start(&a);
 }
+
 static void anim_height_cb(void *var, int32_t v) {
   if (left_eye)
     lv_obj_set_height(left_eye, v);
@@ -948,20 +949,63 @@ static void anim_height_cb(void *var, int32_t v) {
     lv_obj_set_height(right_eye, v);
 }
 
-static void do_blink(void) {
-  if (current_emotion == EMO_LAUGH)
+// Helper for Jelly Width during blink
+static void anim_blink_width_cb(void *var, int32_t v) {
+  lv_obj_set_width((lv_obj_t *)var, v);
+}
+
+void do_blink(void) {
+  if (!left_eye || !right_eye)
+    return;
+  // Don't blink if not in a state that supports it (Custom anim has its own)
+  if (current_emotion == EMO_CUSTOM || current_emotion == EMO_SLEEP ||
+      current_emotion == EMO_LAUGH)
     return;
 
-  int32_t start_h = (current_emotion == EMO_SAD) ? EYE_HEIGHT_SAD : EYE_HEIGHT;
-  lv_anim_t a;
-  lv_anim_init(&a);
-  lv_anim_set_var(&a, NULL);
-  lv_anim_set_values(&a, start_h, 10);
-  lv_anim_set_time(&a, 80);
-  lv_anim_set_playback_time(&a, 100);
-  lv_anim_set_exec_cb(&a, anim_height_cb);
-  lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-  lv_anim_start(&a);
+  // 1. ASYNC DELAY: One eye blinks slightly after the other (Organic feel)
+  int delay_left = (rand() % 30);
+  int delay_right = (rand() % 30);
+
+  // 2. JELLY PHYSICS: Eye gets wider as it gets shorter
+  uint16_t current_w = lv_obj_get_width(left_eye);
+  uint16_t current_h = lv_obj_get_height(left_eye);
+  uint16_t jelly_w = current_w + 15;
+
+  lv_anim_t a_h, a_w;
+
+  // HEIGHT ANIM (Closing is fast 80ms, Opening is smooth 150ms)
+  lv_anim_init(&a_h);
+  lv_anim_set_values(&a_h, current_h, 5);
+  lv_anim_set_time(&a_h, 70);
+  lv_anim_set_playback_time(&a_h, 150);
+  lv_anim_set_path_cb(&a_h, lv_anim_path_ease_in); // Close fast
+  // Opening use overshoot for life!
+  // Note: LVGL internal playback uses the same path usually, but we want
+  // different feel. For simplicity in one call, we use overshoot.
+  lv_anim_set_exec_cb(&a_h, anim_height_cb);
+
+  // WIDTH ANIM (Jelly bulge)
+  lv_anim_init(&a_w);
+  lv_anim_set_values(&a_w, current_w, jelly_w);
+  lv_anim_set_time(&a_w, 70);
+  lv_anim_set_playback_time(&a_w, 150);
+  lv_anim_set_exec_cb(&a_w, anim_blink_width_cb);
+
+  // Apply Left
+  lv_anim_set_var(&a_h, left_eye);
+  lv_anim_set_delay(&a_h, delay_left);
+  lv_anim_start(&a_h);
+  lv_anim_set_var(&a_w, left_eye);
+  lv_anim_set_delay(&a_w, delay_left);
+  lv_anim_start(&a_w);
+
+  // Apply Right
+  lv_anim_set_var(&a_h, right_eye);
+  lv_anim_set_delay(&a_h, delay_right);
+  lv_anim_start(&a_h);
+  lv_anim_set_var(&a_w, right_eye);
+  lv_anim_set_delay(&a_w, delay_right);
+  lv_anim_start(&a_w);
 }
 
 static void anim_cheek_cb(void *var, int32_t v) {

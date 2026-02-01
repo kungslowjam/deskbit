@@ -151,6 +151,47 @@ export function renderPreview(frameIndex, interpolation = null) {
             let props = null;
 
             if (s1 && s2 && s1.type === s2.type) {
+                // Check if paths are different - use crossfade
+                const pathsDifferent = s1.pathData !== s2.pathData;
+
+                if (pathsDifferent && s1.type === 'path') {
+                    // Crossfade: Draw both shapes with blended opacity
+                    const baseOpacity1 = s1.opacity !== undefined ? s1.opacity : 1;
+                    const baseOpacity2 = s2.opacity !== undefined ? s2.opacity : 1;
+
+                    // Draw first shape fading out
+                    const props1 = {
+                        type: s1.type,
+                        x: lerp(s1.x, s2.x, t),
+                        y: lerp(s1.y, s2.y, t),
+                        width: lerp(s1.width, s2.width, t),
+                        height: lerp(s1.height, s2.height, t),
+                        rotation: lerp(s1.rotation || 0, s2.rotation || 0, t),
+                        color: s1.color,
+                        opacity: baseOpacity1 * (1 - t),
+                        pathData: s1.pathData,
+                        isMirrored: s1.isMirrored
+                    };
+                    drawShape(pCtx, props1);
+
+                    // Draw second shape fading in
+                    const props2 = {
+                        type: s2.type,
+                        x: lerp(s1.x, s2.x, t),
+                        y: lerp(s1.y, s2.y, t),
+                        width: lerp(s1.width, s2.width, t),
+                        height: lerp(s1.height, s2.height, t),
+                        rotation: lerp(s1.rotation || 0, s2.rotation || 0, t),
+                        color: s2.color,
+                        opacity: baseOpacity2 * t,
+                        pathData: s2.pathData,
+                        isMirrored: s2.isMirrored
+                    };
+                    drawShape(pCtx, props2);
+                    return; // Skip normal drawing
+                }
+
+                // Normal interpolation (same path or non-path shapes)
                 props = {
                     type: s1.type,
                     x: lerp(s1.x, s2.x, t),
@@ -174,9 +215,9 @@ export function renderPreview(frameIndex, interpolation = null) {
                     } : null
                 };
             } else if (s1) {
-                props = { ...s1, opacity: s1.opacity * (1 - t) }; // Fade out
+                props = { ...s1, opacity: (s1.opacity || 1) * (1 - t) }; // Fade out
             } else if (s2 && t > 0) {
-                props = { ...s2, opacity: s2.opacity * t }; // Fade in
+                props = { ...s2, opacity: (s2.opacity || 1) * t }; // Fade in
             }
 
             if (props) {
@@ -208,6 +249,14 @@ export function drawShape(ctx, props) {
     ctx.fillStyle = props.color || '#ffffff';
     ctx.strokeStyle = props.strokeColor || props.color || '#ffffff';
     ctx.lineWidth = props.strokeWidth || 0;
+
+    // EMO/EILIK-style GLOW EFFECT
+    if (props.glow !== false) { // Enable glow by default
+        ctx.shadowColor = props.color || '#00ffff';
+        ctx.shadowBlur = props.glowIntensity || 15;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+    }
 
     if (props.rotation) {
         const cx = props.x + (props.width || 0) / 2;

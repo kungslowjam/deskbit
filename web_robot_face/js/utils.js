@@ -78,7 +78,11 @@ export function applyEasing(t, type) {
         case 'ease-in': return t * t;
         case 'ease-out': return t * (2 - t);
         case 'ease-in-out': return t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-        case 'overshoot': return 2.70158 * t * t * t - 1.70158 * t * t;
+        case 'overshoot':
+            // EMO-style overshoot - more bouncy
+            const c1 = 1.70158;
+            const c3 = c1 + 1;
+            return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
         case 'bounce':
             if (t < (1 / 2.75)) return 7.5625 * t * t;
             else if (t < (2 / 2.75)) return 7.5625 * (t -= (1.5 / 2.75)) * t + 0.75;
@@ -86,6 +90,25 @@ export function applyEasing(t, type) {
             else return 7.5625 * (t -= (2.625 / 2.75)) * t + 0.984375;
         case 'spring':
             return 1 - Math.pow(Math.E, -5 * t) * Math.cos(10 * t);
+        // NEW: EMO-style smooth curves
+        case 'elastic-out':
+            // Bouncy elastic effect like EMO robot
+            const c4 = (2 * Math.PI) / 3;
+            return t === 0 ? 0 : t === 1 ? 1 :
+                Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+        case 'back-out':
+            // Smooth overshoot for organic feel
+            const c5 = 1.70158;
+            return 1 + c5 * Math.pow(t - 1, 3) + c5 * Math.pow(t - 1, 2);
+        case 'smooth-step':
+            // Extra smooth S-curve for subtle movements
+            return t * t * (3 - 2 * t);
+        case 'smoother-step':
+            // Even smoother for EMO-like feel
+            return t * t * t * (t * (t * 6 - 15) + 10);
+        case 'breathing':
+            // Slow sine wave for idle breathing
+            return 0.5 + 0.5 * Math.sin(t * Math.PI - Math.PI / 2);
         case 'custom':
             const p1x = parseFloat(document.getElementById('bezier-p1x')?.value || 0.42);
             const p1y = parseFloat(document.getElementById('bezier-p1y')?.value || 0);

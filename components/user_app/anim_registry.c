@@ -11,12 +11,11 @@
  */
 
 #include "anim_manager.h"
+#include "anim_presets.h"
 
 // ========================================
 // Include your animation headers here
-#include "animations/my_anim.h"
 // ========================================
-
 
 // Example: Uncomment when you have animations
 // #include "animations/happy_anim.h"
@@ -27,7 +26,7 @@
 // ========================================
 
 void register_all_animations(void) {
-    anim_manager_register_vector(&my_anim_data);
+  anim_presets_init();
   // Register animations here
   // Format: anim_manager_register(name, frames, frame_count, duration_ms)
 

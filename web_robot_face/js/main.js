@@ -7,7 +7,7 @@ state.actions.renderPreview = renderPreview;
 // History callback setup moved to init
 import { initTimeline, renderTimeline, addFrame, duplicateFrame, deleteFrame } from './timeline.js';
 import { startPlayback, stopPlayback, updatePlayheadPosition } from './playback.js';
-import { initTools, setupEventListeners, applyEyePreset } from './tools.js';
+import { initTools, setupEventListeners, applyEyePreset, applyAnimationPreset } from './tools.js';
 import { initRuler } from './timeline.js'; // Helper
 import { updateFrameInfo, updateToolButtons, updateStatesPanel, toggleRound, setZoom, updateInteractionEditor, updateLayersPanel, showToast } from './ui.js';
 import { undo, redo, saveUndo, setHistoryRefreshCallback } from './history.js';
@@ -114,6 +114,11 @@ async function init() {
 
         document.getElementById('color-picker').addEventListener('input', (e) => {
             state.currentColor = e.target.value;
+            // Also update selected shape's color
+            if (state.selectedShape) {
+                state.selectedShape.color = e.target.value;
+                renderEditor();
+            }
         });
 
         // Actions
@@ -171,6 +176,7 @@ async function init() {
 
         // Expose for HTML OnClick
         window.applyEyePreset = applyEyePreset;
+        window.applyAnimationPreset = applyAnimationPreset;
 
         // Shape/Layer Actions
         const toolImport = () => import('./tools.js');
@@ -296,6 +302,30 @@ function deleteState(id) {
         else updateStatesPanel(switchState, deleteState);
     }
 }
+
+// Color Preset Function - Changes color of selected shape
+function setColor(color, element) {
+    // Update current color
+    state.currentColor = color;
+
+    // Update color picker UI
+    const colorPicker = document.getElementById('color-picker');
+    if (colorPicker) colorPicker.value = color;
+
+    // Update selected shape's color if any
+    if (state.selectedShape) {
+        state.selectedShape.color = color;
+        if (state.actions.renderEditor) state.actions.renderEditor();
+        showToast(`Color: ${color.toUpperCase()}`);
+    }
+
+    // Visual feedback - highlight active preset
+    document.querySelectorAll('.color-preset').forEach(p => p.classList.remove('active'));
+    if (element) element.classList.add('active');
+}
+
+// Expose setColor to global scope for onclick handlers in HTML
+window.setColor = setColor;
 
 // Start
 if (document.readyState === 'loading') {

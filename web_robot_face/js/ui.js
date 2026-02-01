@@ -49,7 +49,6 @@ export function updateFrameInfo() {
     const durationInput = getEl('frame-duration');
     if (durationInput) {
         durationInput.value = frame.duration;
-        durationInput.style.color = '#00d2ff';
     }
 
     const totalMs = state.frames.reduce((sum, f) => sum + (parseInt(f.duration) || 100), 0);
@@ -105,8 +104,10 @@ export function updateLayersPanel() {
         item.onclick = () => {
             const idx = parseInt(item.dataset.index);
             state.selectedShape = state.frames[state.currentFrameIndex].shapes[idx];
+            state.currentTool = 'select'; // Ensure select tool is active
             if (state.actions.renderEditor) state.actions.renderEditor();
             updateLayersPanel();
+            updateInteractionEditor(); // Sync color picker with selected shape
         };
     });
 }
@@ -196,6 +197,13 @@ export function updateInteractionEditor() {
             getEl('stroke-width-slider').value = state.selectedShape.strokeWidth || 0;
             getEl('stroke-width-val').innerText = (state.selectedShape.strokeWidth || 0) + 'px';
             getEl('stroke-color-picker').value = state.selectedShape.strokeColor || '#ffffff';
+
+            // Sync main color picker with selected shape's fill color
+            const mainColorPicker = getEl('color-picker');
+            if (mainColorPicker && state.selectedShape.color) {
+                mainColorPicker.value = state.selectedShape.color;
+                state.currentColor = state.selectedShape.color;
+            }
         }
     } else {
         if (editor) editor.classList.add('hidden');
