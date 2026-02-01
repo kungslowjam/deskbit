@@ -4,7 +4,10 @@
 
 ![DeskBit Logo](readme/620191051_25770710362555522_3038655505199516088_n.jpg)
 
-**DeskBit** คืออุปกรณ์ Desktop Companion ขนาดเล็กที่มาพร้อมหน้าจอ AMOLED กลม 1.43 นิ้ว
+**DeskBit** is a cute desktop companion device with a 1.43" round AMOLED display.  
+Designed to be your desk buddy with adorable and useful features!
+
+**DeskBit** คืออุปกรณ์ Desktop Companion ขนาดเล็กที่มาพร้อมหน้าจอ AMOLED กลม 1.43 นิ้ว  
 ออกแบบมาเพื่อเป็นเพื่อนคู่ใจบนโต๊ะทำงานของคุณ พร้อมฟีเจอร์สุดน่ารักและมีประโยชน์!
 
 [![ESP32-S3](https://img.shields.io/badge/MCU-ESP32--S3-blue?style=for-the-badge&logo=espressif)](https://www.espressif.com/)
@@ -15,56 +18,59 @@
 
 [![DeskBit Demo](https://img.youtube.com/vi/HIJs3vWXdCQ/0.jpg)](https://www.youtube.com/watch?v=HIJs3vWXdCQ)
 
-▶️ **[ดูวิดีโอ Demo บน YouTube](https://www.youtube.com/watch?v=HIJs3vWXdCQ)**
+▶️ **[Watch Demo on YouTube | ดูวิดีโอ Demo บน YouTube](https://www.youtube.com/watch?v=HIJs3vWXdCQ)**
 
 </div>
 
 ---
 
-## ✨ คุณสมบัติหลัก (Main Features)
+## ✨ Main Features | คุณสมบัติหลัก
 
-### 🎭 Robot Eyes - ดวงตาหุ่นยนต์สุดน่ารัก
+### 🎭 Robot Eyes | ดวงตาหุ่นยนต์
 <div align="center">
 
 ![Robot Eyes](readme/622279751_1862890687678989_1698581453543050712_n.jpg)
 
 </div>
 
-- **อารมณ์หลากหลาย**: แสดงอารมณ์ได้มากมาย เช่น Happy, Love, Angry, Sleep, Laugh และอื่นๆ
-- **Animation ลื่นไหล**: ใช้ระบบ Physics-based animation ทำให้ดวงตาเคลื่อนไหวเหมือนมีชีวิต
-- **Gaze System**: ดวงตาสามารถมองไปรอบๆ ได้อย่างเป็นธรรมชาติ
-- **Blink Animation**: กระพริบตาอัตโนมัติแบบ Random
-- **Love Mode**: ดวงตาเป็นรูปหัวใจสีชมพู 💕
+| English | ไทย |
+|---------|-----|
+| Multiple expressions: Happy, Love, Angry, Sleep, Laugh and more | อารมณ์หลากหลาย: Happy, Love, Angry, Sleep, Laugh และอื่นๆ |
+| Smooth physics-based animations | Animation ลื่นไหลใช้ระบบ Physics-based |
+| Natural gaze system - eyes look around naturally | ระบบ Gaze - ดวงตามองไปรอบๆ อย่างเป็นธรรมชาติ |
+| Random automatic blinking | กระพริบตาอัตโนมัติแบบ Random |
+| Love mode with pink heart eyes 💕 | Love Mode - ดวงตาเป็นรูปหัวใจสีชมพู 💕 |
 
 ---
 
-### 🍅 Pomodoro Timer - ตัวจับเวลา Pomodoro
+### 🍅 Pomodoro Timer | ตัวจับเวลา Pomodoro
 
-- **Session แบบปรับได้**: ตั้งเวลาทำงานได้ตั้งแต่ 1-60 นาที
-- **Break แบบปรับได้**: ตั้งเวลาพักได้ตั้งแต่ 1-30 นาที
-- **UI สวยงาม**: แสดง Progress Arc พร้อม Animation
-- **บันทึกการตั้งค่า**: จดจำค่าที่ตั้งไว้แม้ปิดเครื่อง (NVS)
+| English | ไทย |
+|---------|-----|
+| Adjustable work sessions (1-60 min) | ตั้งเวลาทำงานได้ 1-60 นาที |
+| Adjustable break time (1-30 min) | ตั้งเวลาพักได้ 1-30 นาที |
+| Beautiful UI with progress arc animation | UI สวยงามพร้อม Progress Arc Animation |
+| Settings saved to flash (NVS) | บันทึกการตั้งค่าลง Flash Memory (NVS) |
 
 ---
 
-### ⚙️ Settings - หน้าจอตั้งค่า
+### ⚙️ Settings | หน้าจอตั้งค่า
 <div align="center">
 
 ![Settings](readme/622422010_699211289822924_7182381935930133792_n.jpg)
 
 </div>
 
-- **🔆 Brightness Control**: ปรับความสว่างหน้าจอได้ 0-100%
-- **📶 WiFi Manager**: 
-  - สแกนหา WiFi โดยรอบ
-  - เชื่อมต่อ WiFi พร้อม Password Dialog
-  - แสดงสถานะการเชื่อมต่อและ IP Address
-  - บันทึก WiFi ที่เชื่อมต่อไว้
-- **💾 NVS Storage**: บันทึกการตั้งค่าทั้งหมดลง Flash Memory
+| Feature | English | ไทย |
+|---------|---------|-----|
+| 🔆 **Brightness** | Adjust screen brightness 0-100% | ปรับความสว่างหน้าจอ 0-100% |
+| 📶 **WiFi Manager** | Scan, connect with password dialog | สแกน, เชื่อมต่อพร้อม Password Dialog |
+| 📍 **Status Display** | Show connection status & IP address | แสดงสถานะการเชื่อมต่อและ IP Address |
+| 💾 **NVS Storage** | All settings saved to flash memory | บันทึกการตั้งค่าทั้งหมดลง Flash Memory |
 
 ---
 
-## 🛠️ Hardware Specification
+## 🛠️ Hardware Specification | ข้อมูลจำเพาะฮาร์ดแวร์
 
 | Component | Specification |
 |-----------|---------------|
@@ -82,7 +88,7 @@
 
 ---
 
-## 📁 Project Structure
+## 📁 Project Structure | โครงสร้างโปรเจกต์
 
 ```
 deskbit/
@@ -108,22 +114,20 @@ deskbit/
 
 ---
 
-## 🎨 Robot Eyes Expressions
+## 🎨 Robot Eyes Expressions | อารมณ์ดวงตา
 
-DeskBit สามารถแสดงอารมณ์ได้หลากหลาย:
-
-| Expression | Description |
-|------------|-------------|
-| 😊 **Happy** | ตาโค้งยิ้ม + แก้มแดง + ปากยิ้ม |
-| 😍 **Love** | ดวงตาเป็นรูปหัวใจสีชมพู |
-| 😠 **Angry** | คิ้วเฉียง + สั่นเล็กน้อย |
-| 😴 **Sleep** | ตาปิด + ตัว Z ลอยขึ้น |
-| 😂 **Laugh** | ตาหยี + ปากเปิดกว้าง + สั่นตัว |
-| 😐 **Idle** | ดวงตาปกติ + กระพริบตาอัตโนมัติ |
+| Expression | English | ไทย |
+|------------|---------|-----|
+| 😊 **Happy** | Curved smiling eyes + rosy cheeks + smile | ตาโค้งยิ้ม + แก้มแดง + ปากยิ้ม |
+| 😍 **Love** | Pink heart-shaped eyes | ดวงตาเป็นรูปหัวใจสีชมพู |
+| 😠 **Angry** | Angled eyebrows + slight shake | คิ้วเฉียง + สั่นเล็กน้อย |
+| 😴 **Sleep** | Closed eyes + floating Z's | ตาปิด + ตัว Z ลอยขึ้น |
+| 😂 **Laugh** | Squinted eyes + open mouth + body shake | ตาหยี + ปากเปิดกว้าง + สั่นตัว |
+| 😐 **Idle** | Normal eyes + auto blink | ดวงตาปกติ + กระพริบตาอัตโนมัติ |
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start | เริ่มต้นใช้งาน
 
 ### 1. Build & Flash
 
@@ -143,34 +147,40 @@ idf.py -p COM3 flash monitor
 ```bash
 cd web_robot_face
 
-# Start the editor
+# Start the editor | เปิด Editor
 start index.html
 
 # OR start with bridge server (for live preview on device)
+# หรือเปิดพร้อม Bridge Server สำหรับ Preview บนอุปกรณ์
 python bridge_server.py
 ```
 
 ---
 
-## 📱 Coming Soon
+## 📱 Coming Soon | ฟีเจอร์ในอนาคต
 
-- 🔔 **Notification Support**: แจ้งเตือนจาก PC/Mobile
-- 🗣️ **Voice Commands**: สั่งงานด้วยเสียง
-- 📊 **Desktop Stats**: แสดงสถิติ CPU/RAM
-- 🎮 **Mini Games**: เกมเล็กๆ เล่นผ่อนคลาย
+| Feature | English | ไทย |
+|---------|---------|-----|
+| 🔔 **Notifications** | PC/Mobile notification support | รองรับการแจ้งเตือนจาก PC/Mobile |
+| 🗣️ **Voice Commands** | Control with voice | สั่งงานด้วยเสียง |
+| 📊 **Desktop Stats** | Display CPU/RAM stats | แสดงสถิติ CPU/RAM |
+| 🎮 **Mini Games** | Fun mini games to relax | เกมเล็กๆ เล่นผ่อนคลาย |
 
 ---
 
 ## 📜 License
 
-This project is for personal/educational use.
+This project is for personal/educational use.  
+โปรเจกต์นี้สำหรับใช้งานส่วนตัว/การศึกษา
 
 ---
 
 <div align="center">
 
 ### Made with ❤️ for Desktop Companions
+### สร้างด้วย ❤️ สำหรับเพื่อนบนโต๊ะทำงาน
 
-**DeskBit** - Your Cute Desk Buddy! 🤖
+**DeskBit** - Your Cute Desk Buddy! 🤖  
+**DeskBit** - เพื่อนคู่ใจบนโต๊ะทำงานของคุณ! 🤖
 
 </div>
