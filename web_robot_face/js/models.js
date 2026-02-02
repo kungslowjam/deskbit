@@ -163,12 +163,16 @@ export class TextShape extends Shape {
             py >= this.y && py <= this.y + this.height;
     }
 
-    clone() {
+    clone(preserveId = false) {
         const newShape = new TextShape(this.x, this.y, this.text, this.fontSize, this.color);
         newShape.rotation = this.rotation;
         newShape.opacity = this.opacity;
         newShape.blendMode = this.blendMode;
-        newShape.id = Date.now() + Math.random();
+        if (preserveId) {
+            newShape.id = this.id;
+        } else {
+            newShape.id = Date.now() + Math.random();
+        }
         newShape.width = this.width;
         newShape.height = this.height;
         return newShape;
@@ -234,12 +238,16 @@ export class ImageShape extends Shape {
         drawShape(context, this);
     }
 
-    clone() {
+    clone(preserveId = false) {
         const newShape = new ImageShape(this.x, this.y, this.src, this.width, this.height);
         newShape.rotation = this.rotation;
         newShape.opacity = this.opacity;
         newShape.blendMode = this.blendMode;
-        newShape.id = Date.now() + Math.random();
+        if (preserveId) {
+            newShape.id = this.id;
+        } else {
+            newShape.id = Date.now() + Math.random();
+        }
         newShape.strokeWidth = this.strokeWidth;
         // Share image instance if loaded to avoid reload flicker
         if (this.isLoaded) {
