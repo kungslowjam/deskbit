@@ -19,7 +19,9 @@ typedef struct {
   bool in_use;
   uint32_t color;
   uint8_t opa;
-  uint8_t type; // 0: RECT, 1: ELLIPSE
+  uint8_t type; // 0: RECT, 1: ELLIPSE, 4: PATH
+  float interpolated_rotation;
+  float interpolated_w, interpolated_h;
 } pool_item_t;
 
 // Custom Ellipse Drawing Event (Optimized with Horizontal Strips)
@@ -44,7 +46,9 @@ static void ellipse_draw_event_cb(lv_event_t *e) {
   float cx = area.x1 + rx;
   float cy = area.y1 + ry;
 
-  int16_t angle_raw = lv_obj_get_style_transform_angle(obj, 0);
+  // Use interpolated rotation from pool item
+  float angle_deg = item->interpolated_rotation;
+  int16_t angle_raw = (int16_t)(angle_deg * 10.0f);
 
   lv_draw_rect_dsc_t draw_dsc;
   lv_draw_rect_dsc_init(&draw_dsc);
@@ -118,13 +122,18 @@ static void polygon_draw_event_cb(lv_event_t *e) {
   if (!item || !s || s->type != 4 || !s->path_points || s->path_point_count < 3)
     return;
 
+  // Use interpolated dimensions for accurate path centering
+  float w = item->interpolated_w;
+  float h = item->interpolated_h;
+
   lv_area_t area;
   lv_obj_get_coords(obj, &area);
 
-  lv_coord_t w = lv_area_get_width(&area);
-  lv_coord_t h = lv_area_get_height(&area);
-  float cx = area.x1 + w / 2.0f;
-  float cy = area.y1 + h / 2.0f;
+  // Calculate screen center of the expanded object
+  float obj_w = (float)lv_area_get_width(&area);
+  float obj_h = (float)lv_area_get_height(&area);
+  float cx = area.x1 + obj_w / 2.0f;
+  float cy = area.y1 + obj_h / 2.0f;
 
   lv_draw_rect_dsc_t draw_dsc;
   lv_draw_rect_dsc_init(&draw_dsc);
@@ -138,8 +147,8 @@ static void polygon_draw_event_cb(lv_event_t *e) {
   if (pt_count < 3)
     return;
 
-  // Rotate path points (Match Web Studio's Clockwise rotation)
-  float angle_rad = s->rotation * M_PI / 180.0f;
+  // Use interpolated rotation stored in pool item
+  float angle_rad = item->interpolated_rotation * M_PI / 180.0f;
   float cos_a = cosf(angle_rad);
   float sin_a = sinf(angle_rad);
 
@@ -148,7 +157,7 @@ static void polygon_draw_event_cb(lv_event_t *e) {
     float lx = s->path_points[i].x - (w / 2.0f);
     float ly = s->path_points[i].y - (h / 2.0f);
 
-    // Standard CW rotation for Y-down
+    // Apply rotation around the center
     float rx = lx * cos_a - ly * sin_a;
     float ry = lx * sin_a + ly * cos_a;
 
@@ -186,7 +195,9 @@ static void polygon_draw_event_cb(lv_event_t *e) {
     }
 
     // Sort intersections
-    for (int i = 0; i < count; i++) {
+    // Sort intersections (Bubble Sort) - Fix: i < count - 1 to avoid
+    // out-of-bounds
+    for (int i = 0; i < count - 1; i++) {
       for (int j = i + 1; j < count; j++) {
         if (intersections[i] > intersections[j]) {
           int16_t temp = intersections[i];
@@ -235,8 +246,11 @@ static void init_pools(lv_obj_t *parent) {
   for (int i = 0; i < POOL_SIZE_OBJ; i++) {
     obj_pool[i].obj = lv_obj_create(parent);
     lv_obj_add_flag(obj_pool[i].obj, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(obj_pool[i].obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(obj_pool[i].obj, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_scrollbar_mode(obj_pool[i].obj, LV_SCROLLBAR_MODE_OFF);
     // Standardize styles to match pixel-perfect drawing
+    lv_obj_set_style_bg_opa(obj_pool[i].obj, 0, 0);
     lv_obj_set_style_border_width(obj_pool[i].obj, 0, 0);
     lv_obj_set_style_outline_width(obj_pool[i].obj, 0, 0);
     lv_obj_set_style_pad_all(obj_pool[i].obj, 0, 0);
@@ -497,13 +511,29 @@ void anim_manager_update(void) {
           lv_obj_set_style_bg_opa(o, (uint8_t)opa, 0);
           lv_obj_set_style_radius(o, (lv_coord_t)s1->corner_radius, 0);
         } else { // ELLIPSE or PATH (Handled by event callback)
-          lv_obj_set_style_bg_opa(o, 0, 0);
+          // Set very low opacity to ensure LVGL triggers draw events
+          lv_obj_set_style_bg_opa(o, 1, 0);
         }
+
+        // Store interpolated properties for custom drawers
+        item->interpolated_rotation = rot;
+        item->interpolated_w = w;
+        item->interpolated_h = h;
 
         // Required for rotation and custom draw events
         lv_obj_set_style_transform_pivot_x(o, (lv_coord_t)(w / 2), 0);
         lv_obj_set_style_transform_pivot_y(o, (lv_coord_t)(h / 2), 0);
-        lv_obj_set_style_transform_angle(o, (int16_t)(rot * 10.0f), 0);
+        // Disable style-based rotation to avoid double rotation (we handle it
+        // manually in drawers)
+        lv_obj_set_style_transform_angle(o, 0, 0);
+
+        // Increase object size to its diagonal to prevent clipping when rotated
+        // manually
+        lv_coord_t max_dim = (lv_coord_t)sqrtf(w * w + h * h) + 2;
+        lv_obj_set_size(o, max_dim, max_dim);
+        lv_obj_set_pos(o, (lv_coord_t)(x + w / 2.0f - max_dim / 2.0f),
+                       (lv_coord_t)(y + h / 2.0f - max_dim / 2.0f));
+
         lv_obj_set_user_data(o, (void *)s1);
 
         // Apply Stroke
