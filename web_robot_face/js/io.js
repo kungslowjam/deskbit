@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { showToast } from './ui.js';
-import { Frame, Shape, TextShape } from './models.js';
+import { Frame, Shape, TextShape, ImageShape } from './models.js';
 
 export async function saveFile(content, filename, mimeType) {
     if ('showSaveFilePicker' in window) {
@@ -71,7 +71,11 @@ export async function exportToJSON() {
                     strokeColor: s.strokeColor,
                     cornerRadius: s.cornerRadius,
                     pathData: s.pathData,
-                    isMirrored: s.isMirrored
+                    isMirrored: s.isMirrored,
+                    src: (() => {
+                        if (s.type === 'image') console.log("Saving Image URL:", s.src);
+                        return s.src;
+                    })() // Log and Save Image URL
                 }))
             }))
         }))
@@ -128,10 +132,17 @@ export async function importFromJSON(resizeCanvasCallback, updateUIHelpers) {
                         }
                         if (frameData.shapes) {
                             frame.shapes = frameData.shapes.map(s => {
-                                // Use TextShape for text type
                                 let shape;
                                 if (s.type === 'text') {
                                     shape = new TextShape(s.x, s.y, s.text, s.fontSize, s.color);
+                                } else if (s.type === 'image') {
+                                    // Fallback for legacy files (Red Square PNG - Reliable)
+                                    const imgSrc = s.src || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAYklEQVR42u3QMQEAAAgDILV/55nBww8KTEB99moLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLC4sFfD3O/0EVPqOAAAAAOw==";
+                                    shape = new ImageShape(s.x, s.y, imgSrc, s.width, s.height);
+                                    if (!s.src) {
+                                        console.warn("Legacy Image Shape found (missing src), using placeholder.");
+                                        showToast("⚠️ Some images were missing URLs and reset.");
+                                    }
                                 } else {
                                     shape = new Shape(s.type, s.x, s.y, s.width, s.height, s.color);
                                 }
@@ -228,25 +239,167 @@ export async function sendToRobot() {
         if (current) current.frames = [...state.frames];
     }
 
-    // Construct payload matching script.js
+    // Helper to rasterize images
+    const rasterizeImages = async (projStates) => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = state.GRID_WIDTH;
+        tempCanvas.height = state.GRID_HEIGHT;
+        const ctx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+        const newProjStates = [];
+
+        for (const st of projStates) {
+            const newFrames = [];
+            for (const realFrame of st.frames) {
+                // Base pixels (Not really used for export if vector mode, but keep logic)
+                let pixelMap = new Map();
+                realFrame.pixels.forEach((c, i) => {
+                    if (c) pixelMap.set(i, c);
+                });
+
+                // Check for images
+                const generatedShapes = [];
+                const images = realFrame.shapes.filter(s => s.type === 'image');
+
+                if (images.length > 0) {
+                    try {
+                        ctx.clearRect(0, 0, state.GRID_WIDTH, state.GRID_HEIGHT);
+                        let hasdrawn = false;
+
+                        // Process images sequentially
+                        for (const imgShape of images) {
+                            if (imgShape.image && (imgShape.src || imgShape.image.src)) {
+                                const src = imgShape.src || imgShape.image.src;
+                                await new Promise(resolve => {
+                                    const tempImg = new Image();
+                                    tempImg.crossOrigin = "Anonymous";
+                                    tempImg.onload = () => {
+                                        ctx.save();
+                                        ctx.globalAlpha = imgShape.opacity;
+                                        if (imgShape.rotation) {
+                                            const cx = imgShape.x + imgShape.width / 2;
+                                            const cy = imgShape.y + imgShape.height / 2;
+                                            ctx.translate(cx, cy);
+                                            ctx.rotate(imgShape.rotation * Math.PI / 180);
+                                            ctx.translate(-cx, -cy);
+                                        }
+                                        ctx.drawImage(tempImg, imgShape.x, imgShape.y, imgShape.width, imgShape.height);
+                                        ctx.restore();
+                                        hasdrawn = true;
+                                        resolve();
+                                    };
+                                    tempImg.onerror = () => {
+                                        console.warn("Export Image Load Error:", src);
+                                        resolve();
+                                    };
+                                    tempImg.src = src;
+                                });
+                            }
+                        }
+
+                        if (hasdrawn) {
+                            // Downsample Factor (4x) for Board Compatibility
+                            const SCALE = 4;
+                            const dsWidth = Math.ceil(state.GRID_WIDTH / SCALE);
+                            const dsHeight = Math.ceil(state.GRID_HEIGHT / SCALE);
+
+                            const dsCanvas = document.createElement('canvas');
+                            dsCanvas.width = dsWidth;
+                            dsCanvas.height = dsHeight;
+                            const dsCtx = dsCanvas.getContext('2d', { willReadFrequently: true });
+
+                            dsCtx.drawImage(tempCanvas, 0, 0, dsWidth, dsHeight);
+
+                            const imgData = dsCtx.getImageData(0, 0, dsWidth, dsHeight);
+                            const data = imgData.data;
+
+                            // Run-Length Encoding on DOWNSAMPLED Data
+                            for (let y = 0; y < dsHeight; y++) {
+                                for (let x = 0; x < dsWidth; x++) {
+                                    const i = (y * dsWidth + x) * 4;
+                                    const alpha = data[i + 3];
+
+                                    if (alpha > 128) { // Strict threshold
+                                        const r = data[i];
+                                        const g = data[i + 1];
+                                        const b = data[i + 2];
+                                        const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+
+                                        let runLen = 1;
+                                        while (x + runLen < dsWidth) {
+                                            const ni = (y * dsWidth + (x + runLen)) * 4;
+                                            const na = data[ni + 3];
+                                            const nr = data[ni];
+                                            const ng = data[ni + 1];
+                                            const nb = data[ni + 2];
+                                            if (na <= 128 || nr !== r || ng !== g || nb !== b) break;
+                                            runLen++;
+                                        }
+
+                                        const rectShape = {
+                                            type: 'rect',
+                                            x: x * SCALE,
+                                            y: y * SCALE,
+                                            width: runLen * SCALE,
+                                            height: SCALE,
+                                            color: hex,
+                                            opacity: alpha / 255,
+                                            rotation: 0,
+                                            id: Date.now() + Math.random(),
+                                            cornerRadius: 0,
+                                            strokeWidth: 0
+                                        };
+
+                                        generatedShapes.push(rectShape);
+                                        x += runLen - 1;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("CORS or Image Error during Rasterization:", e);
+                        showToast("⚠️ Image export skipped (CORS/Error)");
+                    }
+                }
+
+                // Merge optimized image-rects with existing shapes
+                const finalShapes = realFrame.shapes
+                    ? realFrame.shapes.filter(s => s.type !== 'image').map(s => ({ ...s }))
+                    : [];
+
+                // Add generated rects (Icon pixels)
+                if (generatedShapes.length > 64) {
+                    console.warn(`Image too complex (${generatedShapes.length} rects), truncating to 64.`);
+                    generatedShapes.length = 64;
+                    showToast("⚠️ Icon simplified (HW limit)");
+                }
+                finalShapes.push(...generatedShapes);
+
+                newFrames.push({
+                    pixels: [],
+                    duration: realFrame.duration,
+                    shapes: finalShapes
+                });
+            }
+            newProjStates.push({ id: st.id, name: st.name, frames: newFrames });
+        }
+        return newProjStates;
+    };
+
+    const processedStates = await rasterizeImages(state.projectStates);
+
     const payload = {
         name,
         width: state.GRID_WIDTH,
         height: state.GRID_HEIGHT,
         fps: parseInt(document.getElementById('fps-range')?.value || 12),
         activeStateId: state.activeStateId,
-        states: state.projectStates.map(st => ({
-            id: st.id,
-            name: st.name,
-            frames: st.frames.map(f => ({
-                pixels: f.pixels.map((c, i) => c ? { i, c } : null).filter(p => p),
-                duration: f.duration,
-                shapes: f.shapes ? f.shapes.map(s => ({ ...s })) : [] // Deep copy properties
-            }))
-        }))
+        states: processedStates
     };
 
     const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:8000' : '';
+    console.log("Sending Payload with Rasterized Images...", payload);
+
     try {
         const res = await fetch(`${API_BASE}/save-anim`, {
             method: 'POST',
@@ -256,6 +409,7 @@ export async function sendToRobot() {
         if (res.ok) showToast('✅ Saved! Run "idf.py build"');
         else showToast('❌ Error: Bridge not running?');
     } catch (e) {
+        console.error(e);
         showToast('❌ Failed! Is bridge server running?');
     }
 }

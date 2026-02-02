@@ -12,6 +12,11 @@ export function initRenderer(c, p) {
     previewCanvas = p;
     ctx = canvas.getContext('2d');
     previewCtx = previewCanvas.getContext('2d');
+
+    // Ensure high-quality vector rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    previewCtx.imageSmoothingEnabled = true;
 }
 
 export function renderEditor() {
@@ -311,9 +316,19 @@ export function drawShape(ctx, props) {
     } else if (props.type === 'text') {
         ctx.font = `${props.fontSize || 16}px Inter, sans-serif`;
         ctx.fillText(props.text || '', props.x, props.y + (props.fontSize || 16));
-
-        // Optional: Measure text if needed, but for drawing just render.
-        // models.js updates width/height here. We won't do it in this pure render function.
+    } else if (props.type === 'image') {
+        if (props.isLoaded && props.image) {
+            ctx.drawImage(props.image, props.x, props.y, props.width, props.height);
+        } else {
+            // Placeholder while loading
+            ctx.fillStyle = '#333';
+            ctx.fillRect(props.x, props.y, props.width, props.height);
+            ctx.strokeStyle = '#666';
+            ctx.strokeRect(props.x, props.y, props.width, props.height);
+            ctx.fillStyle = '#aaa';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('Loading...', props.x + 5, props.y + 20);
+        }
     }
 
     ctx.restore();

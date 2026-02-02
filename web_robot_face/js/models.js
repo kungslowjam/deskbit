@@ -91,7 +91,7 @@ export class Shape {
             const s = 1 / (2 * area) * (y1 * x3 - x1 * y3 + (y3 - y1) * px + (x1 - x3) * py);
             const t = 1 / (2 * area) * (x1 * y2 - y1 * x2 + (y1 - y2) * px + (x2 - x1) * py);
             return s > 0 && t > 0 && (1 - s - t) > 0;
-        } else if (this.type === 'path' && this.pathData) {
+        } else if ((this.type === 'path' && this.pathData) || this.type === 'image') {
             return px >= this.x && px <= this.x + this.width &&
                 py >= this.y && py <= this.y + this.height;
         }
@@ -210,5 +210,42 @@ export class Frame {
         }
         ctx.putImageData(imgData, 0, 0);
         this.isCacheDirty = false;
+    }
+}
+
+export class ImageShape extends Shape {
+    constructor(x, y, src, width, height) {
+        super('image', x, y, width || 100, height || 100, '#ffffff');
+        this.src = src;
+        this.image = new Image();
+        this.isLoaded = false;
+        this.image.onload = () => {
+            this.isLoaded = true;
+            // Trigger re-render
+            window.dispatchEvent(new CustomEvent('robot-face-refresh'));
+        };
+        this.image.onerror = () => {
+            console.error("Failed to load image:", src);
+        }
+        this.image.src = src;
+    }
+
+    draw(context) {
+        drawShape(context, this);
+    }
+
+    clone() {
+        const newShape = new ImageShape(this.x, this.y, this.src, this.width, this.height);
+        newShape.rotation = this.rotation;
+        newShape.opacity = this.opacity;
+        newShape.blendMode = this.blendMode;
+        newShape.id = Date.now() + Math.random();
+        newShape.strokeWidth = this.strokeWidth;
+        // Share image instance if loaded to avoid reload flicker
+        if (this.isLoaded) {
+            newShape.image = this.image;
+            newShape.isLoaded = true;
+        }
+        return newShape;
     }
 }

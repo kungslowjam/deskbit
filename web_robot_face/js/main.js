@@ -13,7 +13,7 @@ import { updateFrameInfo, updateToolButtons, updateStatesPanel, toggleRound, set
 import { undo, redo, saveUndo, setHistoryRefreshCallback } from './history.js';
 import * as IO from './io.js';
 import { PIXELS_PER_SEC } from './constants.js';
-import { Frame } from './models.js';
+import { Frame, ImageShape } from './models.js';
 
 // Global Resize Function
 function resizeCanvas(newWidth, newHeight) {
@@ -182,6 +182,42 @@ async function init() {
         const toolImport = () => import('./tools.js');
         document.getElementById('action-duplicate')?.addEventListener('click', () => toolImport().then(m => m.duplicateShape()));
         document.getElementById('action-delete-shape')?.addEventListener('click', () => toolImport().then(m => m.deleteShape()));
+
+        // Add Image Logic
+        document.getElementById('action-add-image')?.addEventListener('click', () => {
+            console.log("Add Image Clicked");
+            try {
+                // User provided URL as default
+                const defaultUrl = "https://cdn-icons-png.flaticon.com/128/1612/1612781.png";
+                const url = prompt("Enter Image URL:", defaultUrl);
+
+                if (url) {
+                    console.log("Loading Image:", url);
+                    saveUndo();
+
+                    const frame = state.frames[state.currentFrameIndex];
+                    if (!frame) throw new Error("No active frame found");
+
+                    const size = 100;
+                    const x = (state.GRID_WIDTH - size) / 2;
+                    const y = (state.GRID_HEIGHT - size) / 2;
+
+                    const imgShape = new ImageShape(x, y, url, size, size);
+                    frame.shapes.push(imgShape);
+
+                    state.selectedShape = imgShape;
+                    state.currentTool = 'select';
+
+                    updateToolButtons();
+                    renderEditor();
+                    updateLayersPanel();
+                    showToast("Image Added: " + url.substring(0, 20) + "...");
+                }
+            } catch (err) {
+                console.error("Add Image Error:", err);
+                alert("Failed to add image: " + err.message);
+            }
+        });
         document.getElementById('action-scale-up')?.addEventListener('click', () => toolImport().then(m => m.scaleShape(1.1)));
         document.getElementById('action-scale-down')?.addEventListener('click', () => toolImport().then(m => m.scaleShape(0.9)));
 
@@ -326,6 +362,12 @@ function setColor(color, element) {
 
 // Expose setColor to global scope for onclick handlers in HTML
 window.setColor = setColor;
+
+// Listener for Async Image Loads
+window.addEventListener('robot-face-refresh', () => {
+    if (state.actions.renderEditor) state.actions.renderEditor();
+    else renderEditor();
+});
 
 // Start
 if (document.readyState === 'loading') {

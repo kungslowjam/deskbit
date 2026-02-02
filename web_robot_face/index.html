@@ -50,7 +50,8 @@
         #editor-canvas {
             background: #000;
             box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
-            image-rendering: pixelated;
+            image-rendering: auto;
+            /* Smoother edges for vectors */
             transition: transform 0.1s ease-out;
         }
 
@@ -1140,6 +1141,10 @@
                 <button class="tool-btn tooltip p-3 rounded-xl hover:bg-white/5 transition-all flex justify-center"
                     id="tool-text-obj" data-tooltip="Text (T)">
                     <i data-lucide="type" class="w-5 h-5"></i>
+                </button>
+                <button class="tooltip p-3 rounded-xl hover:bg-white/5 transition-all flex justify-center text-zinc-400"
+                    id="action-add-image" data-tooltip="Add Image / Icon">
+                    <i data-lucide="image-plus" class="w-5 h-5"></i>
                 </button>
                 <div class="h-px bg-border mx-2 my-1"></div>
                 <!-- Symmetry Toggle -->

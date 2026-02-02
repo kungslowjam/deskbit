@@ -744,6 +744,10 @@ export function applyAnimationPreset(type, options = {}) {
 
             frame.shapes = baseShapes.map((base, idx) => {
                 const s = base.clone(true);
+
+                // Skip animation for images (keep them static)
+                if (s.type === 'image') return s;
+
                 const shapeCenterX = s.x + s.width / 2;
                 const isRight = shapeCenterX > centerX;
 
