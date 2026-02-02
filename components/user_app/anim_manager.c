@@ -244,7 +244,7 @@ static anim_vector_t *current_vector_data = NULL;
 // Pool Management
 static void init_pools(lv_obj_t *parent) {
   for (int i = 0; i < POOL_SIZE_OBJ; i++) {
-    obj_pool[i].obj = lv_obj_create(parent);
+    obj_pool[i].obj = lv_img_create(parent);
     lv_obj_add_flag(obj_pool[i].obj, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(obj_pool[i].obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(obj_pool[i].obj, LV_OBJ_FLAG_CLICKABLE);
@@ -494,8 +494,8 @@ void anim_manager_update(void) {
     float opa = (s1->opacity + (s2->opacity - s1->opacity) * t) * 255.0f;
     float rot = s1->rotation + (s2->rotation - s1->rotation) * t;
 
-    if (s1->type == 0 || s1->type == 1 ||
-        s1->type == 4) { // RECT, ELLIPSE, or PATH
+    if (s1->type == 0 || s1->type == 1 || s1->type == 4 ||
+        s1->type == 5) { // RECT, ELLIPSE, PATH, or IMAGE
       if (obj_idx < POOL_SIZE_OBJ) {
         pool_item_t *item = &obj_pool[obj_idx++];
         lv_obj_t *o = item->obj;
@@ -506,11 +506,20 @@ void anim_manager_update(void) {
         lv_obj_set_size(o, (lv_coord_t)w, (lv_coord_t)h);
         lv_obj_set_pos(o, (lv_coord_t)x, (lv_coord_t)y);
 
-        if (s1->type == 0) { // RECT
+        if (s1->type == 0) {       // RECT
+          lv_img_set_src(o, NULL); // Clear any previous image
           lv_obj_set_style_bg_color(o, lv_color_hex(s1->color), 0);
           lv_obj_set_style_bg_opa(o, (uint8_t)opa, 0);
           lv_obj_set_style_radius(o, (lv_coord_t)s1->corner_radius, 0);
+        } else if (s1->type == 5 && s1->img_src) { // IMAGE
+          lv_img_set_src(o, s1->img_src);
+          lv_obj_set_style_bg_opa(o, 0, 0); // Transparent BG
+          lv_obj_set_style_img_recolor(o, lv_color_hex(s1->color), 0);
+          lv_obj_set_style_img_recolor_opa(
+              o, 0, 0); // No recolor by default unless needed
+          lv_obj_set_style_img_opa(o, (uint8_t)opa, 0);
         } else { // ELLIPSE or PATH (Handled by event callback)
+          lv_img_set_src(o, NULL);
           // Set very low opacity to ensure LVGL triggers draw events
           lv_obj_set_style_bg_opa(o, 1, 0);
         }
@@ -523,21 +532,30 @@ void anim_manager_update(void) {
         // Required for rotation and custom draw events
         lv_obj_set_style_transform_pivot_x(o, (lv_coord_t)(w / 2), 0);
         lv_obj_set_style_transform_pivot_y(o, (lv_coord_t)(h / 2), 0);
-        // Disable style-based rotation to avoid double rotation (we handle it
-        // manually in drawers)
-        lv_obj_set_style_transform_angle(o, 0, 0);
 
-        // Increase object size to its diagonal to prevent clipping when rotated
-        // manually
-        lv_coord_t max_dim = (lv_coord_t)sqrtf(w * w + h * h) + 2;
-        lv_obj_set_size(o, max_dim, max_dim);
-        lv_obj_set_pos(o, (lv_coord_t)(x + w / 2.0f - max_dim / 2.0f),
-                       (lv_coord_t)(y + h / 2.0f - max_dim / 2.0f));
+        if (s1->type == 5) { // IMAGE: Precise sizing, no rotation padding
+          lv_obj_set_size(o, (lv_coord_t)w, (lv_coord_t)h);
+          lv_obj_set_pos(o, (lv_coord_t)x, (lv_coord_t)y);
+          lv_img_set_zoom(o, 256); // Force 1x Zoom
+          lv_obj_set_style_transform_angle(o, (lv_coord_t)(rot * 10),
+                                           0); // Try native angle if supported
+        } else {
+          // VECTORS: Increase object size to its diagonal to prevent clipping
+          // when drawn manually Disable style-based rotation to avoid double
+          // rotation (we handle it manually in drawers)
+          lv_obj_set_style_transform_angle(o, 0, 0);
+
+          lv_coord_t max_dim = (lv_coord_t)sqrtf(w * w + h * h) + 2;
+          lv_obj_set_size(o, max_dim, max_dim);
+          lv_obj_set_pos(o, (lv_coord_t)(x + w / 2.0f - max_dim / 2.0f),
+                         (lv_coord_t)(y + h / 2.0f - max_dim / 2.0f));
+        }
 
         lv_obj_set_user_data(o, (void *)s1);
 
         // Apply Stroke
-        if (s1->stroke_width > 0) {
+        if (s1->stroke_width > 0 &&
+            s1->type != 5) { // No border for images usually
           lv_obj_set_style_border_width(o, (lv_coord_t)s1->stroke_width, 0);
           lv_obj_set_style_border_color(o, lv_color_hex(s1->stroke_color), 0);
           lv_obj_set_style_border_opa(o, (uint8_t)opa, 0);

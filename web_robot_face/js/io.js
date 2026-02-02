@@ -298,8 +298,9 @@ export async function sendToRobot() {
                         }
 
                         if (hasdrawn) {
-                            // Downsample Factor (4x) for Board Compatibility
-                            const SCALE = 4;
+                            // Native Resolution (1:1) - Best Quality
+                            // We rely on auto-cropping to keep file size manageable.
+                            const SCALE = 1;
                             const dsWidth = Math.ceil(state.GRID_WIDTH / SCALE);
                             const dsHeight = Math.ceil(state.GRID_HEIGHT / SCALE);
 
@@ -308,52 +309,81 @@ export async function sendToRobot() {
                             dsCanvas.height = dsHeight;
                             const dsCtx = dsCanvas.getContext('2d', { willReadFrequently: true });
 
+                            // Draw the main temp canvas onto the downsampled canvas
                             dsCtx.drawImage(tempCanvas, 0, 0, dsWidth, dsHeight);
 
                             const imgData = dsCtx.getImageData(0, 0, dsWidth, dsHeight);
                             const data = imgData.data;
 
-                            // Run-Length Encoding on DOWNSAMPLED Data
+                            // EXTRACT NATIVE BITMAP DATA (RGBA)
+                            // We will send this as a raw array to the Python bridge.
+                            // Python will convert it to C array (RGB565).
+                            const bitmap = [];
+
+                            // Optimization: Find bounding box of valid pixels to minimize data size
+                            let minX = dsWidth, minY = dsHeight, maxX = 0, maxY = 0;
+                            let hasContent = false;
+
                             for (let y = 0; y < dsHeight; y++) {
                                 for (let x = 0; x < dsWidth; x++) {
-                                    const i = (y * dsWidth + x) * 4;
-                                    const alpha = data[i + 3];
-
-                                    if (alpha > 128) { // Strict threshold
-                                        const r = data[i];
-                                        const g = data[i + 1];
-                                        const b = data[i + 2];
-                                        const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-
-                                        let runLen = 1;
-                                        while (x + runLen < dsWidth) {
-                                            const ni = (y * dsWidth + (x + runLen)) * 4;
-                                            const na = data[ni + 3];
-                                            const nr = data[ni];
-                                            const ng = data[ni + 1];
-                                            const nb = data[ni + 2];
-                                            if (na <= 128 || nr !== r || ng !== g || nb !== b) break;
-                                            runLen++;
-                                        }
-
-                                        const rectShape = {
-                                            type: 'rect',
-                                            x: x * SCALE,
-                                            y: y * SCALE,
-                                            width: runLen * SCALE,
-                                            height: SCALE,
-                                            color: hex,
-                                            opacity: alpha / 255,
-                                            rotation: 0,
-                                            id: Date.now() + Math.random(),
-                                            cornerRadius: 0,
-                                            strokeWidth: 0
-                                        };
-
-                                        generatedShapes.push(rectShape);
-                                        x += runLen - 1;
+                                    const alpha = data[(y * dsWidth + x) * 4 + 3];
+                                    if (alpha > 10) {
+                                        if (x < minX) minX = x;
+                                        if (x > maxX) maxX = x;
+                                        if (y < minY) minY = y;
+                                        if (y > maxY) maxY = y;
+                                        hasContent = true;
                                     }
                                 }
+                            }
+
+                            if (hasContent) {
+                                // ALIGNMENT FIX: Ensure Width is Even (Multiple of 2)
+                                // Hardware displays often fail with odd-width bitmaps (skewing/tiling artifacts)
+                                let cropW = maxX - minX + 1;
+                                if (cropW % 2 !== 0) {
+                                    maxX++; // Extend crop by 1 pixel to make it even
+                                    if (maxX >= dsWidth) maxX = dsWidth - 1; // Safety clip
+                                    // If clipping prevented extension, extend minX left instead
+                                    if ((maxX - minX + 1) % 2 !== 0 && minX > 0) {
+                                        minX--;
+                                    }
+                                    cropW = maxX - minX + 1;
+                                }
+
+                                const cropH = maxY - minY + 1;
+
+                                // Extract cropped data
+                                for (let y = minY; y <= maxY; y++) {
+                                    for (let x = minX; x <= maxX; x++) {
+                                        if (x < dsWidth && y < dsHeight) { // Bounds check
+                                            const i = (y * dsWidth + x) * 4;
+                                            bitmap.push(data[i]);     // R
+                                            bitmap.push(data[i + 1]); // G
+                                            bitmap.push(data[i + 2]); // B
+                                            bitmap.push(data[i + 3]); // Alpha
+                                        } else {
+                                            // Padding for alignment/clipping edge
+                                            bitmap.push(0, 0, 0, 0);
+                                        }
+                                    }
+                                }
+
+                                // Create IMAGE Shape (New Native Type)
+                                const imageShape = {
+                                    type: 'image', // New native type
+                                    x: minX * SCALE,
+                                    y: minY * SCALE,
+                                    width: cropW * SCALE,
+                                    height: cropH * SCALE,
+                                    bitmapWidth: cropW,
+                                    bitmapHeight: cropH,
+                                    bitmapData: bitmap, // Raw Array
+                                    opacity: 1.0,
+                                    rotation: 0,
+                                    id: Date.now()
+                                };
+                                generatedShapes.push(imageShape);
                             }
                         }
                     } catch (e) {

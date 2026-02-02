@@ -35,6 +35,8 @@ typedef struct {
   float stroke_width;
   const lv_point_t *path_points;
   uint16_t path_point_count;
+  const lv_img_dsc_t
+      *img_src; // Pointer to LVGL image descriptor for native image support
 } anim_shape_t;
 
 // Vector Frame

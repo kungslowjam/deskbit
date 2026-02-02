@@ -555,7 +555,49 @@ def generate_c_file(json_data, output_dir, suggested_name='exported_anim'):
 
             text_field = f"\"{text}\"" if t == 'SHAPE_TEXT' else 'NULL'
             
-            shape_configs.append(f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, {text_field}, {fs}, {cr:.2f}f, {sc_hex}, {sw_stroke:.2f}f, {points_var}, {points_count} }}')
+            # --- Native Image Support ---
+            img_src_ptr = "NULL"
+            if stype == 'image' and 'bitmapData' in s:
+                # Extract Bitmap Data
+                img_data = s['bitmapData']
+                bw = s.get('bitmapWidth', 10)
+                bh = s.get('bitmapHeight', 10)
+                
+                img_var_name = f"{anim_name}_f{f_idx}_s{s_idx}_img"
+                map_var_name = f"{anim_name}_f{f_idx}_s{s_idx}_map"
+                
+                c_bytes = []
+                idx = 0
+                while idx < len(img_data):
+                    r = img_data[idx]
+                    g = img_data[idx+1]
+                    b = img_data[idx+2]
+                    # a = img_data[idx+3] # Ignored for 565, assuming opaque or chroma
+                    
+                    hb, lb = rgb565_convert(r, g, b)
+                    # SWAP TO BIG ENDIAN (HB, LB) for correct colors on ESP32/ST7789
+                    c_bytes.append(f"0x{hb:02x},0x{lb:02x}") 
+                    idx += 4
+                
+                c_array_str = ",".join(c_bytes)
+                
+                frame_path_arrays += f"static const uint8_t {map_var_name}[] = {{{c_array_str}}};\n"
+                frame_path_arrays += f"static const lv_img_dsc_t {img_var_name} = {{\n"
+                frame_path_arrays += f"  .header.always_zero = 0,\n"
+                frame_path_arrays += f"  .header.w = {bw},\n"
+                frame_path_arrays += f"  .header.h = {bh},\n"
+                frame_path_arrays += f"  .data_size = {len(c_bytes) * 2},\n"
+                frame_path_arrays += f"  .header.cf = LV_IMG_CF_TRUE_COLOR,\n"
+                frame_path_arrays += f"  .data = {map_var_name},\n"
+                frame_path_arrays += f"}};\n"
+                
+                img_src_ptr = f"&{img_var_name}"
+                # Force type to prevent vector render attempt (though we need type for anim_manager)
+                # We should probably define a new SHAPE_IMAGE type on C side or just rely on the pointer?
+                # Let's map 'image' to a high number or 5 (SHAPE_CUSTOM)
+                t = '5' # SHAPE_IMAGE (Manually mapped)
+
+            shape_configs.append(f'    {{ {t}, {x:.2f}f, {y:.2f}f, {w:.2f}f, {h:.2f}f, {rot:.2f}f, {color_hex}, {opacity:.2f}f, {x2:.2f}f, {y2:.2f}f, {text_field}, {fs}, {cr:.2f}f, {sc_hex}, {sw_stroke:.2f}f, {points_var}, {points_count}, {img_src_ptr} }}')
 
         if shape_configs:
             output_c_content += frame_path_arrays
