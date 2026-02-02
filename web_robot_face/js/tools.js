@@ -294,18 +294,18 @@ export function applyEyePreset(type) {
 
     const centerX = state.GRID_WIDTH / 2;
     const centerY = state.GRID_HEIGHT / 2;
-    const padding = 75;
+    const padding = 40;
     const color = state.currentColor || '#00d2ff';
 
     // Standard Size
-    const w = 120;
-    const h = 100;
+    const w = 160;
+    const h = 130;
 
     // Normalized Paths (0-100 coordinate space) - High Fidelity EMO/EILIK Style
     const paths = {
         // === Original EMO Style ===
         // Angry: Sharp Crescent
-        angry: "M0,60 Q50,15 100,60 Q50,95 0,60 Z",
+        angry: "M0,30 L100,30 Q100,100 50,100 Q0,100 0,30 Z",
         // Alert: Wide Egg
         alert: "M50,5 C80,5 100,35 100,65 C100,90 80,100 50,100 C20,100 0,90 0,65 C0,35 20,5 50,5 Z",
         // Sad/Neutral: Friendly Squircle
@@ -317,7 +317,7 @@ export function applyEyePreset(type) {
         // Slit: Clean Rounded Bar
         slit: "M5,42 L95,42 Q100,42 100,50 Q100,58 95,58 L5,58 Q0,58 0,50 Q0,42 5,42 Z",
         // Happy: Curved Arc (Smile Eyes)
-        happy: "M5,70 Q50,20 95,70 Q50,85 5,70 Z",
+        happy: "M5,70 Q50,20 95,70 Q50,50 5,70 Z",
         // Love: Heart Shape
         love: "M50,20 C20,-10 -10,30 50,80 C110,30 80,-10 50,20 Z",
         // Sleepy: Droopy Half-Closed
@@ -355,7 +355,33 @@ export function applyEyePreset(type) {
         // UwU: Cute squiggly
         uwu: "M5,60 Q25,40 50,60 Q75,40 95,60 Q75,75 50,60 Q25,75 5,60 Z",
         // OwO: Big round cute
-        owo: "M50,5 C85,5 100,30 100,55 C100,80 85,100 50,100 C15,100 0,80 0,55 C0,30 15,5 50,5 Z"
+        owo: "M50,5 C85,5 100,30 100,55 C100,80 85,100 50,100 C15,100 0,80 0,55 C0,30 15,5 50,5 Z",
+
+        // === NEW Essential Presets ===
+        // Shock: Very wide open
+        shock: "M50,0 C90,0 100,20 100,50 C100,80 90,100 50,100 C10,100 0,80 0,50 C0,20 10,0 50,0 Z",
+        // Focused: Slightly narrowed, determined
+        focused: "M5,30 L95,30 Q100,50 95,70 L5,70 Q0,50 5,30 Z",
+        // Tired: Heavy droopy
+        tired: "M0,60 L100,50 Q100,85 50,90 Q0,85 0,60 Z",
+        // Scared: Wide but trembling shape
+        scared: "M50,5 Q85,5 95,35 Q100,60 90,85 Q50,95 10,85 Q0,60 5,35 Q15,5 50,5 Z",
+        // Annoyed: Half-lidded, unimpressed
+        annoyed: "M5,40 L95,35 Q100,50 95,65 L5,60 Q0,50 5,40 Z",
+        // Shy: Small and looking away
+        shy: "M30,30 Q50,25 70,35 Q80,55 70,75 Q50,80 30,70 Q20,50 30,30 Z",
+        // Loading: Circular progress style
+        loading: "M50,10 A40,40 0 1,1 50,90 A40,40 0 1,1 50,10 Z",
+        // Closed: Completely shut
+        closed: "M5,48 L95,48 Q100,50 95,52 L5,52 Q0,50 5,48 Z",
+        // Squint: Almost closed, suspicious
+        squint: "M5,45 L95,42 Q100,50 95,58 L5,55 Q0,50 5,45 Z",
+        // Glare: Sharp angry stare
+        glare: "M0,35 L100,35 Q100,75 50,80 Q0,75 0,35 Z",
+        // Pleading: Puppy eyes
+        pleading: "M50,0 C90,10 100,40 95,70 Q50,100 5,70 C0,40 10,10 50,0 Z",
+        // Sparkle: Excited with highlight
+        sparkle: "M50,5 C80,5 100,30 100,55 C100,80 80,100 50,100 C20,100 0,80 0,55 C0,30 20,5 50,5 Z"
     };
 
     const rotations = {
@@ -384,7 +410,20 @@ export function applyEyePreset(type) {
         question: { left: 0, right: 0 },
         dot: { left: 0, right: 0 },
         uwu: { left: 0, right: 0 },
-        owo: { left: 0, right: 0 }
+        owo: { left: 0, right: 0 },
+        // New presets rotations
+        shock: { left: 0, right: 0 },
+        focused: { left: 0, right: 0 },
+        tired: { left: 8, right: -8 },
+        scared: { left: -5, right: 5 },
+        annoyed: { left: 5, right: -5 },
+        shy: { left: 15, right: -15 },
+        loading: { left: 0, right: 0 },
+        closed: { left: 0, right: 0 },
+        squint: { left: 3, right: -3 },
+        glare: { left: 20, right: -20 },
+        pleading: { left: -8, right: 8 },
+        sparkle: { left: -3, right: 3 }
     };
 
     const createEye = (isRight) => {
@@ -417,256 +456,316 @@ export function applyEyePreset(type) {
     showToast(`Preset: ${type.toUpperCase()} Applied`);
 }
 
-export function applyAnimationPreset(type) {
+export function applyAnimationPreset(type, options = {}) {
     try {
         if (typeof Frame === 'undefined') {
             showToast("Error: Frame class not loaded");
             return;
         }
 
-        saveUndo();
-        state.frames.length = 0; // Clear current sequence in-place
+        const lastFrameIndex = state.frames.length > 0 ? state.frames.length - 1 : 0;
+        const currentFrame = state.frames[lastFrameIndex];
 
+        if (!currentFrame || !currentFrame.shapes || currentFrame.shapes.length === 0) {
+            showToast("No eyes found to animate! Draw or select a preset first.");
+            return;
+        }
+
+        // Configuration with default values
+        const config = {
+            speed: options.speed || 1.0,      // Speed multiplier (0.5 = slower, 2.0 = faster)
+            intensity: options.intensity || 1.0  // Intensity multiplier (0.5 = subtle, 2.0 = exaggerated)
+        };
+
+        // Animation Templates - Define timing and transformations as parameters
+        const animationTemplates = {
+            wink: {
+                frames: [
+                    { duration: 300, easing: 'linear', transform: 'reset' },
+                    { duration: 80, easing: 'ease-out', transform: { type: 'squash', target: 'right', factor: 0.8 } },
+                    { duration: 60, easing: 'ease-out', transform: { type: 'squash', target: 'right', factor: 0.1 } },
+                    { duration: 80, easing: 'linear', transform: { type: 'squash', target: 'right', factor: 0.1 } },
+                    { duration: 120, easing: 'overshoot', transform: { type: 'squash', target: 'right', factor: 1.1 } },
+                    { duration: 150, easing: 'ease-out', transform: 'reset' }
+                ]
+            },
+            blink: {
+                frames: [
+                    { duration: 400, easing: 'linear', transform: 'reset' },
+                    { duration: 50, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.8 } },
+                    { duration: 40, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } },
+                    { duration: 30, easing: 'linear', transform: { type: 'squash', target: 'both', factor: 0.1 } },
+                    { duration: 100, easing: 'overshoot', transform: { type: 'squash', target: 'both', factor: 1.1 } },
+                    { duration: 120, easing: 'ease-out', transform: 'reset' }
+                ]
+            },
+            surprise: {
+                frames: [
+                    { duration: 80, easing: 'linear', transform: 'reset' },
+                    { duration: 80, easing: 'overshoot', transform: { type: 'translate', y: -8, scale: { w: 1.1, h: 1.2 } } },
+                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -5, scale: { w: 1.05, h: 1.1 } } },
+                    { duration: 600, easing: 'linear', transform: { type: 'translate', y: -4 } },
+                    { duration: 250, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            happy: {
+                frames: [
+                    { duration: 150, easing: 'linear', transform: 'reset' },
+                    { duration: 100, easing: 'overshoot', transform: { type: 'translate', y: -10 } },
+                    { duration: 80, easing: 'linear', transform: { type: 'translate', y: -5 } },
+                    { duration: 80, easing: 'linear', transform: { type: 'translate', y: -7 } },
+                    { duration: 600, easing: 'linear', transform: { type: 'translate', y: -3 } },
+                    { duration: 300, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            sad: {
+                frames: [
+                    { duration: 250, easing: 'linear', transform: 'reset' },
+                    { duration: 400, easing: 'ease-out', transform: { type: 'translate', y: 8, rotate: { left: -10, right: 10 } } },
+                    { duration: 200, easing: 'linear', transform: { type: 'translate', y: 10, x: 1, rotate: { left: -12, right: 12 } } },
+                    { duration: 200, easing: 'linear', transform: { type: 'translate', y: 9, x: -1, rotate: { left: -10, right: 10 } } },
+                    { duration: 400, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            nod: {
+                frames: [
+                    { duration: 150, easing: 'ease-in-out', transform: 'reset' },
+                    { duration: 100, easing: 'ease-out', transform: { type: 'translate', y: 15 } },
+                    { duration: 80, easing: 'ease-in', transform: { type: 'translate', y: 5 } },
+                    { duration: 100, easing: 'ease-out', transform: { type: 'translate', y: 12 } },
+                    { duration: 150, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            shake: {
+                frames: [
+                    { duration: 80, easing: 'linear', transform: 'reset' },
+                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: -10 } },
+                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: 10 } },
+                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: -8 } },
+                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: 8 } },
+                    { duration: 120, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            skeptic: {
+                frames: [
+                    { duration: 200, easing: 'linear', transform: 'reset' },
+                    { duration: 180, easing: 'ease-out', transform: { type: 'squash-asymmetric', left: { squash: 1.0 }, right: { squash: 0.7, rotate: -10 } } },
+                    { duration: 800, easing: 'linear', transform: { type: 'squash-asymmetric', left: { rotate: 5 }, right: { squash: 0.6, rotate: -12 } } },
+                    { duration: 300, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            love: {
+                frames: [
+                    { duration: 150, easing: 'linear', transform: 'reset' },
+                    { duration: 150, easing: 'overshoot', transform: { type: 'translate', scale: { w: 1.2, h: 1.2 } } },
+                    { duration: 120, easing: 'ease-out', transform: { type: 'translate', scale: { w: 1.05, h: 1.05 } } },
+                    { duration: 120, easing: 'ease-in', transform: { type: 'translate', scale: { w: 1.15, h: 1.15 } } },
+                    { duration: 120, easing: 'ease-out', transform: { type: 'translate', scale: { w: 1.05, h: 1.05 } } },
+                    { duration: 400, easing: 'linear', transform: 'reset' }
+                ]
+            },
+            angry: {
+                frames: [
+                    { duration: 100, easing: 'linear', transform: 'reset' },
+                    { duration: 80, easing: 'ease-out', transform: { type: 'translate', x: 3 } },
+                    { duration: 60, easing: 'linear', transform: { type: 'translate', x: -3 } },
+                    { duration: 60, easing: 'linear', transform: { type: 'translate', x: 3 } },
+                    { duration: 60, easing: 'linear', transform: { type: 'translate', x: -3 } },
+                    { duration: 600, easing: 'linear', transform: { type: 'translate', scale: { w: 1.05, h: 1.0 } } },
+                    { duration: 300, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            sleepy: {
+                frames: [
+                    { duration: 400, easing: 'linear', transform: 'reset' },
+                    { duration: 500, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.6 } },
+                    { duration: 300, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.4 } },
+                    { duration: 400, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } },
+                    { duration: 600, easing: 'ease-in', transform: { type: 'squash', target: 'both', factor: 0.3 } },
+                    { duration: 800, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } }
+                ]
+            },
+            confused: {
+                frames: [
+                    { duration: 150, easing: 'linear', transform: 'reset' },
+                    { duration: 180, easing: 'ease-out', transform: { type: 'tilt', rotate: 10 } },
+                    { duration: 180, easing: 'ease-out', transform: { type: 'tilt', rotate: -10 } },
+                    { duration: 400, easing: 'linear', transform: 'reset' }
+                ]
+            },
+            excited: {
+                frames: [
+                    { duration: 80, easing: 'linear', transform: 'reset' },
+                    { duration: 60, easing: 'overshoot', transform: { type: 'translate', y: -12 } },
+                    { duration: 50, easing: 'linear', transform: { type: 'translate', y: 8 } },
+                    { duration: 50, easing: 'linear', transform: { type: 'translate', y: -10 } },
+                    { duration: 50, easing: 'linear', transform: { type: 'translate', y: 6 } },
+                    { duration: 400, easing: 'ease-out', transform: 'reset' }
+                ]
+            },
+            idle: {
+                frames: [
+                    { duration: 800, easing: 'ease-in-out', transform: 'reset' },
+                    { duration: 600, easing: 'ease-in-out', transform: { type: 'translate', scale: { w: 1.02, h: 1.02 } } },
+                    { duration: 800, easing: 'ease-in-out', transform: 'reset' },
+                    { duration: 600, easing: 'ease-in-out', transform: { type: 'translate', scale: { w: 1.02, h: 1.02 } } },
+                    { duration: 60, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } },
+                    { duration: 40, easing: 'linear', transform: { type: 'squash', target: 'both', factor: 0.1 } },
+                    { duration: 100, easing: 'overshoot', transform: 'reset' },
+                    { duration: 600, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            curious: {
+                frames: [
+                    { duration: 200, easing: 'linear', transform: 'reset' },
+                    { duration: 300, easing: 'ease-in-out', transform: { type: 'translate', x: -15, rotate: { left: -5, right: -5 } } },
+                    { duration: 200, easing: 'ease-in-out', transform: 'reset' },
+                    { duration: 300, easing: 'ease-in-out', transform: { type: 'translate', x: 15, rotate: { left: 5, right: 5 } } },
+                    { duration: 200, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            laugh: {
+                frames: [
+                    { duration: 100, easing: 'linear', transform: 'reset' },
+                    { duration: 80, easing: 'ease-out', transform: { type: 'translate', y: -8 } },
+                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -3 } },
+                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -10 } },
+                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -4 } },
+                    { duration: 300, easing: 'ease-out', transform: 'reset' }
+                ]
+            },
+            bounce: {
+                frames: [
+                    { duration: 100, easing: 'ease-in', transform: { type: 'translate', y: 0, scale: { w: 1.1, h: 0.8 } } },
+                    { duration: 80, easing: 'overshoot', transform: { type: 'translate', y: -20, scale: { w: 0.9, h: 1.1 } } },
+                    { duration: 100, easing: 'ease-in', transform: 'reset' },
+                    { duration: 80, easing: 'overshoot', transform: { type: 'translate', y: -5 } },
+                    { duration: 150, easing: 'ease-in-out', transform: 'reset' }
+                ]
+            },
+            dizzy: {
+                frames: [
+                    { duration: 100, easing: 'linear', transform: 'reset' },
+                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 45 } },
+                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 90 } },
+                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 135 } },
+                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 180 } },
+                    { duration: 300, easing: 'ease-out', transform: 'reset' }
+                ]
+            }
+        };
+
+        // Get template or create a simple default
+        const template = animationTemplates[type] || {
+            frames: [
+                { duration: 500, easing: 'ease-in-out', transform: 'reset' }
+            ]
+        };
+
+        // Capture base shapes
+        const baseShapes = currentFrame.shapes.map(s => s.clone(true));
         const centerX = state.GRID_WIDTH / 2;
-        const centerY = state.GRID_HEIGHT / 2;
-        const padding = 75;
-        const color = state.currentColor || '#00d2ff';
-        const w = 120, h = 100;
 
-        // EMO Style Eye Paths
-        const paths = {
-            normal: "M10,15 Q50,5 90,15 Q100,50 90,85 Q50,95 10,85 Q0,50 10,15 Z",
-            closed: "M5,48 L95,48 Q95,55 50,55 Q5,55 5,48 Z",
-            wide: "M50,0 C85,0 100,25 100,50 C100,75 85,100 50,100 C15,100 0,75 0,50 C0,25 15,0 50,0 Z",
-            squint: "M0,60 Q50,15 100,60 Q50,95 0,60 Z",
-            happy: "M5,70 Q50,20 95,70 Q50,85 5,70 Z",
-            sad: "M10,20 Q50,40 90,20 Q100,55 90,80 Q50,90 10,80 Q0,55 10,20 Z",
-            love: "M50,15 C25,-10 -5,25 50,75 C105,25 75,-10 50,15 Z",
-            angry: "M0,55 Q50,20 100,55 Q50,85 0,55 Z",
-            sleepy: "M5,50 L95,45 Q95,65 50,68 Q5,65 5,50 Z",
-            confused: "M15,25 Q50,10 85,35 Q95,55 85,75 Q50,90 15,75 Q5,55 15,25 Z",
-            excited: "M50,5 C80,5 100,30 100,55 C100,80 80,100 50,100 C20,100 0,80 0,55 C0,30 20,5 50,5 Z",
-            tiny: "M30,35 Q50,30 70,35 Q75,50 70,65 Q50,70 30,65 Q25,50 30,35 Z"
+        saveUndo();
+        const startIndex = state.frames.length;
+
+        // Helper to apply transformations based on template
+        const applyTransform = (shape, base, transform, isRight, idx) => {
+            if (transform === 'reset') return; // No changes
+
+            if (transform.type === 'squash') {
+                const factor = Math.pow(transform.factor, config.intensity);
+                const shouldApply = transform.target === 'both' ||
+                    (transform.target === 'right' && isRight) ||
+                    (transform.target === 'left' && !isRight);
+
+                if (shouldApply) {
+                    const newHeight = base.height * factor;
+                    shape.height = newHeight;
+                    shape.y = base.y + (base.height - newHeight) / 2;
+                }
+            }
+            else if (transform.type === 'squash-asymmetric') {
+                // Different transformations for left and right eyes
+                const eyeTransform = isRight ? transform.right : transform.left;
+                if (eyeTransform) {
+                    if (eyeTransform.squash !== undefined) {
+                        const factor = Math.pow(eyeTransform.squash, config.intensity);
+                        const newHeight = base.height * factor;
+                        shape.height = newHeight;
+                        shape.y = base.y + (base.height - newHeight) / 2;
+                    }
+                    if (eyeTransform.rotate !== undefined) {
+                        shape.rotation += eyeTransform.rotate * config.intensity;
+                    }
+                }
+            }
+            else if (transform.type === 'translate') {
+                if (transform.x !== undefined) shape.x += transform.x * config.intensity;
+                if (transform.y !== undefined) shape.y += transform.y * config.intensity;
+
+                if (transform.scale) {
+                    if (transform.scale.w) {
+                        const newWidth = base.width * transform.scale.w;
+                        shape.width = newWidth;
+                        shape.x -= (newWidth - base.width) / 2;
+                    }
+                    if (transform.scale.h) {
+                        const newHeight = base.height * transform.scale.h;
+                        shape.height = newHeight;
+                        shape.y -= (newHeight - base.height) / 2;
+                    }
+                }
+
+                if (transform.rotate) {
+                    if (typeof transform.rotate === 'object') {
+                        const rotValue = isRight ? transform.rotate.right : transform.rotate.left;
+                        shape.rotation += rotValue * config.intensity;
+                    } else {
+                        shape.rotation += transform.rotate * config.intensity;
+                    }
+                }
+            }
+            else if (transform.type === 'tilt') {
+                // Rotation for both eyes (confused head tilt)
+                shape.rotation += transform.rotate * config.intensity;
+            }
+            else if (transform.type === 'rotate-absolute') {
+                // Absolute rotation (for dizzy spin)
+                shape.rotation = transform.angle * config.intensity;
+            }
         };
 
-        // Consistent IDs for interpolation
-        const LEFT_EYE_ID = 'anim_left_eye';
-        const RIGHT_EYE_ID = 'anim_right_eye';
-
-        const createFrame = (leftPath, rightPath, duration, easing = 'ease-in-out', leftRot = 0, rightRot = 0, offsetY = 0) => {
+        // Generate frames from template
+        template.frames.forEach(frameConfig => {
             const frame = new Frame();
-            frame.duration = duration;
-            frame.easing = easing;
+            frame.duration = Math.round(frameConfig.duration / config.speed);
+            frame.easing = frameConfig.easing || 'linear';
 
-            const createEye = (isRight, pathKey, rot) => {
-                const x = isRight ? centerX + padding : centerX - padding - w;
-                const y = centerY - (h / 2) + offsetY;
-                const s = new Shape('path', x, y, w, h, color);
-                s.pathData = paths[pathKey] || paths.normal;
-                s.rotation = rot;
-                s.id = isRight ? RIGHT_EYE_ID : LEFT_EYE_ID; // Consistent ID for interpolation
-                if (isRight) s.isMirrored = true;
+            frame.shapes = baseShapes.map((base, idx) => {
+                const s = base.clone(true);
+                const shapeCenterX = s.x + s.width / 2;
+                const isRight = shapeCenterX > centerX;
+
+                applyTransform(s, base, frameConfig.transform, isRight);
                 return s;
-            };
+            });
 
-            frame.shapes.push(createEye(false, leftPath, leftRot));
-            frame.shapes.push(createEye(true, rightPath, rightRot));
-            return frame;
-        };
+            state.frames.push(frame);
+        });
 
-        // Animation Definitions - EMO Style with Life!
-        if (type === 'wink') {
-            // Playful wink with subtle bounce
-            state.frames.push(createFrame('normal', 'normal', 300));
-            state.frames.push(createFrame('normal', 'normal', 80, 'ease-out', 0, 3)); // prepare
-            state.frames.push(createFrame('normal', 'closed', 60, 'ease-out'));
-            state.frames.push(createFrame('normal', 'closed', 80, 'linear'));
-            state.frames.push(createFrame('normal', 'normal', 120, 'overshoot', 0, -5)); // bounce back
-            state.frames.push(createFrame('normal', 'normal', 150, 'ease-out'));
-        }
-        else if (type === 'blink') {
-            // Natural blink with micro-movement
-            state.frames.push(createFrame('normal', 'normal', 400));
-            state.frames.push(createFrame('normal', 'normal', 50, 'ease-out', 0, 0, -2)); // squish
-            state.frames.push(createFrame('closed', 'closed', 40, 'ease-out', 0, 0, 0));
-            state.frames.push(createFrame('closed', 'closed', 30, 'linear'));
-            state.frames.push(createFrame('normal', 'normal', 100, 'overshoot', 0, 0, 3)); // bounce
-            state.frames.push(createFrame('normal', 'normal', 120, 'ease-out'));
-        }
-        else if (type === 'surprise') {
-            // Dramatic surprise with shake
-            state.frames.push(createFrame('normal', 'normal', 80));
-            state.frames.push(createFrame('wide', 'wide', 80, 'overshoot', -3, 3, -8)); // jump up
-            state.frames.push(createFrame('wide', 'wide', 60, 'linear', 3, -3, -5));
-            state.frames.push(createFrame('wide', 'wide', 60, 'linear', -2, 2, -6));
-            state.frames.push(createFrame('wide', 'wide', 600, 'linear', 0, 0, -4)); // hold
-            state.frames.push(createFrame('normal', 'normal', 250, 'ease-in-out'));
-        }
-        else if (type === 'skeptic') {
-            // Suspicious look with tilt
-            state.frames.push(createFrame('normal', 'normal', 200));
-            state.frames.push(createFrame('normal', 'squint', 180, 'ease-out', 5, -20));
-            state.frames.push(createFrame('normal', 'squint', 300, 'linear', 8, -22)); // tilt more
-            state.frames.push(createFrame('normal', 'squint', 800, 'linear', 8, -22));
-            state.frames.push(createFrame('normal', 'squint', 200, 'ease-in', 3, -18));
-            state.frames.push(createFrame('normal', 'normal', 300, 'ease-in-out'));
-        }
-        else if (type === 'happy') {
-            // Joyful bounce with squish
-            state.frames.push(createFrame('normal', 'normal', 150));
-            state.frames.push(createFrame('normal', 'normal', 80, 'ease-out', 0, 0, 5)); // prepare
-            state.frames.push(createFrame('happy', 'happy', 100, 'overshoot', -3, 3, -10)); // jump!
-            state.frames.push(createFrame('happy', 'happy', 80, 'linear', 3, -3, -5));
-            state.frames.push(createFrame('happy', 'happy', 80, 'linear', -2, 2, -7));
-            state.frames.push(createFrame('happy', 'happy', 600, 'linear', 0, 0, -3));
-            state.frames.push(createFrame('normal', 'normal', 300, 'ease-in-out'));
-        }
-        else if (type === 'sad') {
-            // Droopy sad with trembling
-            state.frames.push(createFrame('normal', 'normal', 250));
-            state.frames.push(createFrame('sad', 'sad', 400, 'ease-out', -10, 10, 8)); // droop
-            state.frames.push(createFrame('sad', 'sad', 200, 'linear', -12, 12, 10)); // tremble
-            state.frames.push(createFrame('sad', 'sad', 200, 'linear', -10, 10, 9));
-            state.frames.push(createFrame('sad', 'sad', 800, 'linear', -12, 12, 10));
-            state.frames.push(createFrame('normal', 'normal', 400, 'ease-in-out'));
-        }
-        else if (type === 'love') {
-            // Heart eyes with pulse
-            state.frames.push(createFrame('normal', 'normal', 150));
-            state.frames.push(createFrame('love', 'love', 150, 'overshoot', 0, 0, -5)); // pop!
-            state.frames.push(createFrame('love', 'love', 120, 'ease-out', 0, 0, -2)); // pulse
-            state.frames.push(createFrame('love', 'love', 120, 'ease-in', 0, 0, -6)); // pulse
-            state.frames.push(createFrame('love', 'love', 120, 'ease-out', 0, 0, -3));
-            state.frames.push(createFrame('love', 'love', 120, 'ease-in', 0, 0, -5));
-            state.frames.push(createFrame('love', 'love', 400, 'linear', 0, 0, -4));
-            state.frames.push(createFrame('normal', 'normal', 300, 'ease-in-out'));
-        }
-        else if (type === 'angry') {
-            // Fierce shake with intensity
-            state.frames.push(createFrame('normal', 'normal', 100));
-            state.frames.push(createFrame('angry', 'angry', 80, 'ease-out', 25, -25, -3));
-            state.frames.push(createFrame('angry', 'angry', 60, 'linear', 22, -22, -5)); // shake
-            state.frames.push(createFrame('angry', 'angry', 60, 'linear', 28, -28, -3));
-            state.frames.push(createFrame('angry', 'angry', 60, 'linear', 22, -22, -4));
-            state.frames.push(createFrame('angry', 'angry', 600, 'linear', 25, -25, -3));
-            state.frames.push(createFrame('normal', 'normal', 300, 'ease-in-out'));
-        }
-        else if (type === 'sleepy') {
-            // Slow droopy blinks
-            state.frames.push(createFrame('normal', 'normal', 400));
-            state.frames.push(createFrame('sleepy', 'sleepy', 500, 'ease-out', 5, -5, 5));
-            state.frames.push(createFrame('sleepy', 'sleepy', 300, 'ease-out', 3, -3, 6));
-            state.frames.push(createFrame('closed', 'closed', 400, 'ease-out', 0, 0, 8));
-            state.frames.push(createFrame('sleepy', 'sleepy', 600, 'ease-in', 4, -4, 6)); // struggle
-            state.frames.push(createFrame('closed', 'closed', 800, 'ease-out', 0, 0, 8)); // give up
-        }
-        else if (type === 'confused') {
-            // Tilting back and forth
-            state.frames.push(createFrame('normal', 'normal', 150));
-            state.frames.push(createFrame('confused', 'normal', 180, 'ease-out', -12, 0, 0));
-            state.frames.push(createFrame('normal', 'confused', 180, 'ease-out', 0, 12, 0));
-            state.frames.push(createFrame('confused', 'confused', 150, 'linear', -8, 8, -3));
-            state.frames.push(createFrame('confused', 'confused', 150, 'linear', -10, 10, 0));
-            state.frames.push(createFrame('confused', 'confused', 400, 'linear', -8, 8, -2));
-            state.frames.push(createFrame('normal', 'normal', 300, 'ease-in-out'));
-        }
-        else if (type === 'excited') {
-            // Bouncy excitement with rapid changes
-            state.frames.push(createFrame('normal', 'normal', 80));
-            state.frames.push(createFrame('excited', 'excited', 60, 'overshoot', -8, 8, -12));
-            state.frames.push(createFrame('wide', 'wide', 50, 'linear', 8, -8, -8));
-            state.frames.push(createFrame('excited', 'excited', 50, 'linear', -6, 6, -14));
-            state.frames.push(createFrame('wide', 'wide', 50, 'linear', 6, -6, -10));
-            state.frames.push(createFrame('excited', 'excited', 50, 'linear', -8, 8, -12));
-            state.frames.push(createFrame('wide', 'wide', 50, 'linear', 5, -5, -9));
-            state.frames.push(createFrame('excited', 'excited', 400, 'ease-out', -3, 3, -8));
-            state.frames.push(createFrame('normal', 'normal', 250, 'ease-in-out'));
-        }
-        else if (type === 'nod') {
-            // Natural nodding with follow-through
-            state.frames.push(createFrame('normal', 'normal', 150, 'ease-in-out', 0, 0, 0));
-            state.frames.push(createFrame('normal', 'normal', 100, 'ease-out', 0, 0, 18));
-            state.frames.push(createFrame('normal', 'normal', 80, 'ease-in', 0, 0, 5));
-            state.frames.push(createFrame('normal', 'normal', 100, 'ease-out', 0, 0, 15));
-            state.frames.push(createFrame('normal', 'normal', 80, 'ease-in', 0, 0, 3));
-            state.frames.push(createFrame('normal', 'normal', 150, 'ease-in-out', 0, 0, 0));
-        }
-        else if (type === 'shake') {
-            // Vigorous head shake
-            state.frames.push(createFrame('normal', 'normal', 80, 'linear', 0, 0, 0));
-            state.frames.push(createFrame('normal', 'normal', 50, 'ease-out', -12, -12, 0));
-            state.frames.push(createFrame('normal', 'normal', 50, 'ease-out', 12, 12, 0));
-            state.frames.push(createFrame('normal', 'normal', 50, 'ease-out', -10, -10, 0));
-            state.frames.push(createFrame('normal', 'normal', 50, 'ease-out', 10, 10, 0));
-            state.frames.push(createFrame('normal', 'normal', 50, 'ease-out', -6, -6, 0));
-            state.frames.push(createFrame('normal', 'normal', 50, 'ease-out', 6, 6, 0));
-            state.frames.push(createFrame('normal', 'normal', 120, 'ease-in-out', 0, 0, 0));
-        }
-        // NEW: Idle breathing animation
-        else if (type === 'idle') {
-            state.frames.push(createFrame('normal', 'normal', 800, 'ease-in-out', 0, 0, 0));
-            state.frames.push(createFrame('normal', 'normal', 600, 'ease-in-out', 0, 0, 3)); // breathe in
-            state.frames.push(createFrame('normal', 'normal', 800, 'ease-in-out', 0, 0, 0));
-            state.frames.push(createFrame('normal', 'normal', 600, 'ease-in-out', 0, 0, 3));
-            state.frames.push(createFrame('closed', 'closed', 60, 'ease-out')); // blink
-            state.frames.push(createFrame('closed', 'closed', 40, 'linear'));
-            state.frames.push(createFrame('normal', 'normal', 100, 'overshoot'));
-            state.frames.push(createFrame('normal', 'normal', 600, 'ease-in-out', 0, 0, 2));
-        }
-        // NEW: Curious look around
-        else if (type === 'curious') {
-            state.frames.push(createFrame('normal', 'normal', 200));
-            state.frames.push(createFrame('wide', 'wide', 150, 'ease-out', 0, 0, 0));
-            state.frames.push(createFrame('wide', 'wide', 300, 'ease-in-out', -15, -15, 0)); // look left
-            state.frames.push(createFrame('wide', 'wide', 200, 'ease-in-out', 0, 0, 0));
-            state.frames.push(createFrame('wide', 'wide', 300, 'ease-in-out', 15, 15, 0)); // look right
-            state.frames.push(createFrame('wide', 'wide', 200, 'ease-in-out', 0, 0, 0));
-            state.frames.push(createFrame('normal', 'normal', 250, 'ease-in-out'));
-        }
-        // NEW: Hearty laugh
-        else if (type === 'laugh') {
-            state.frames.push(createFrame('normal', 'normal', 100));
-            state.frames.push(createFrame('happy', 'happy', 80, 'ease-out', 0, 0, -8));
-            state.frames.push(createFrame('happy', 'happy', 60, 'linear', 0, 0, -3));
-            state.frames.push(createFrame('happy', 'happy', 60, 'linear', 0, 0, -10));
-            state.frames.push(createFrame('happy', 'happy', 60, 'linear', 0, 0, -4));
-            state.frames.push(createFrame('happy', 'happy', 60, 'linear', 0, 0, -9));
-            state.frames.push(createFrame('happy', 'happy', 60, 'linear', 0, 0, -5));
-            state.frames.push(createFrame('happy', 'happy', 300, 'ease-out', 0, 0, -6));
-            state.frames.push(createFrame('normal', 'normal', 250, 'ease-in-out'));
-        }
-        // NEW: Bouncy attention
-        else if (type === 'bounce') {
-            state.frames.push(createFrame('normal', 'normal', 100, 'ease-in', 0, 0, 5)); // squat
-            state.frames.push(createFrame('wide', 'wide', 80, 'overshoot', 0, 0, -20)); // jump!
-            state.frames.push(createFrame('wide', 'wide', 100, 'ease-in', 0, 0, 5)); // land
-            state.frames.push(createFrame('normal', 'normal', 80, 'overshoot', 0, 0, -12)); // bounce
-            state.frames.push(createFrame('normal', 'normal', 80, 'ease-in', 0, 0, 3)); // settle
-            state.frames.push(createFrame('normal', 'normal', 60, 'ease-out', 0, 0, -5)); // tiny bounce
-            state.frames.push(createFrame('normal', 'normal', 150, 'ease-in-out', 0, 0, 0));
-        }
-        // NEW: Dizzy spinning
-        else if (type === 'dizzy') {
-            state.frames.push(createFrame('normal', 'normal', 100));
-            state.frames.push(createFrame('confused', 'confused', 100, 'linear', 15, 15, 0));
-            state.frames.push(createFrame('confused', 'confused', 100, 'linear', -20, -20, 0));
-            state.frames.push(createFrame('confused', 'confused', 100, 'linear', 25, 25, 3));
-            state.frames.push(createFrame('confused', 'confused', 100, 'linear', -18, -18, -2));
-            state.frames.push(createFrame('confused', 'confused', 100, 'linear', 20, 20, 4));
-            state.frames.push(createFrame('confused', 'confused', 150, 'ease-out', -10, -10, 0));
-            state.frames.push(createFrame('sleepy', 'sleepy', 300, 'ease-out', 5, -5, 5));
-            state.frames.push(createFrame('normal', 'normal', 300, 'ease-in-out'));
-        }
+        state.currentFrameIndex = startIndex;
 
-        state.currentFrameIndex = 0;
-
-        // Refresh Everything
+        // Refresh UI
         if (typeof renderTimeline === 'function') renderTimeline();
         if (state.actions.renderEditor) state.actions.renderEditor();
         if (state.actions.renderPreview) state.actions.renderPreview();
         updateLayersPanel();
         updateFrameInfo();
-        showToast(`Anim: ${type.toUpperCase()} Loaded ✨`);
+
+        const speedInfo = config.speed !== 1.0 ? ` (${config.speed}x speed)` : '';
+        const intensityInfo = config.intensity !== 1.0 ? ` (${config.intensity}x intensity)` : '';
+        showToast(`Anim: ${type.toUpperCase()} Appended${speedInfo}${intensityInfo} ✨ (Total: ${state.frames.length} frames)`);
 
     } catch (err) {
         console.error("Preset Error:", err);

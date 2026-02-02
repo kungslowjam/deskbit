@@ -250,13 +250,13 @@ export function drawShape(ctx, props) {
     ctx.strokeStyle = props.strokeColor || props.color || '#ffffff';
     ctx.lineWidth = props.strokeWidth || 0;
 
-    // EMO/EILIK-style GLOW EFFECT
-    if (props.glow !== false) { // Enable glow by default
-        ctx.shadowColor = props.color || '#00ffff';
-        ctx.shadowBlur = props.glowIntensity || 15;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-    }
+    // Glow effect removed as requested
+    // if (props.glow !== false) {
+    //     ctx.shadowColor = props.color || '#00ffff';
+    //     ctx.shadowBlur = props.glowIntensity || 15;
+    //     ctx.shadowOffsetX = 0;
+    //     ctx.shadowOffsetY = 0;
+    // }
 
     if (props.rotation) {
         const cx = props.x + (props.width || 0) / 2;

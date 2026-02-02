@@ -506,14 +506,15 @@
                                 Templates</span>
                             <div class="h-px bg-white/5 flex-1"></div>
                         </div>
-                        <div class="grid grid-cols-3 gap-2" id="eye-library">
+                        <div class="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto" id="eye-library">
                             <!-- Row 1: Core Emotions -->
                             <button
                                 class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
                                 onclick="applyEyePreset('angry')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <path d="M10,30 Q50,5 90,30 Q50,45 10,30 Z" fill="#00ffff" />
+                                    <path d="M0,15 L100,15 Q100,50 50,50 Q0,50 0,15 Z" fill="#00ffff"
+                                        transform="rotate(15 50 25)" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Angry</span>
@@ -523,7 +524,7 @@
                                 onclick="applyEyePreset('happy')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <path d="M5,40 Q50,10 95,40 Q50,48 5,40 Z" fill="#00ffff" />
+                                    <path d="M5,40 Q50,10 95,40 Q50,25 5,40 Z" fill="#00ffff" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Happy</span>
@@ -533,8 +534,8 @@
                                 onclick="applyEyePreset('sad')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <path d="M10,10 Q50,25 90,10 Q95,30 90,45 Q50,50 10,45 Q5,30 10,10 Z"
-                                        fill="#00ffff" />
+                                    <path d="M10,8 Q50,3 90,8 Q100,25 90,43 Q50,48 10,43 Q0,25 10,8 Z" fill="#00ffff"
+                                        transform="rotate(-8 50 25)" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Sad</span>
@@ -555,7 +556,7 @@
                                 onclick="applyEyePreset('excited')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <ellipse cx="50" cy="25" rx="40" ry="22" fill="#00ffff" />
+                                    <ellipse cx="50" cy="25" rx="45" ry="23" fill="#00ffff" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Excited</span>
@@ -565,7 +566,7 @@
                                 onclick="applyEyePreset('sleepy')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <path d="M5,25 L95,20 Q95,40 50,42 Q5,40 5,25 Z" fill="#00ffff" />
+                                    <path d="M5,28 L95,23 Q95,42 50,44 Q5,42 5,28 Z" fill="#00ffff" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Sleepy</span>
@@ -576,7 +577,8 @@
                                 onclick="applyEyePreset('evil')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <path d="M5,27 Q50,10 95,27 Q50,44 5,27 Z" fill="#00ffff" />
+                                    <path d="M0,25 Q50,8 100,25 Q50,42 0,25 Z" fill="#00ffff"
+                                        transform="rotate(12 50 25)" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Evil</span>
@@ -586,7 +588,7 @@
                                 onclick="applyEyePreset('alert')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <ellipse cx="50" cy="28" rx="35" ry="20" fill="#00ffff" />
+                                    <ellipse cx="50" cy="25" rx="42" ry="22" fill="#00ffff" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Alert</span>
@@ -596,7 +598,7 @@
                                 onclick="applyEyePreset('bored')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <rect x="10" y="20" width="80" height="12" rx="6" fill="#00ffff" />
+                                    <rect x="5" y="20" width="90" height="12" rx="6" fill="#00ffff" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Bored</span>
@@ -607,7 +609,7 @@
                                 onclick="applyEyePreset('bean')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <path d="M10,15 L90,15 Q90,45 50,45 Q10,45 10,15 Z" fill="#00ffff" />
+                                    <path d="M2,25 L98,25 Q98,50 50,50 Q2,50 2,25 Z" fill="#00ffff" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Bean</span>
@@ -617,7 +619,7 @@
                                 onclick="applyEyePreset('slit')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <rect x="10" y="22" width="80" height="8" rx="4" fill="#00ffff" />
+                                    <rect x="5" y="22" width="90" height="8" rx="4" fill="#00ffff" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Slit</span>
@@ -627,10 +629,200 @@
                                 onclick="applyEyePreset('cry')">
                                 <svg viewBox="0 0 100 50"
                                     class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                    <path d="M15,8 Q50,2 85,8 Q95,25 85,42 Q50,48 15,42 Q5,25 15,8 Z" fill="#5dade2" />
+                                    <path d="M10,5 Q50,0 90,5 Q100,23 90,40 Q50,47 10,40 Q0,23 10,5 Z" fill="#5dade2" />
                                 </svg>
                                 <span
                                     class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-blue-400 tracking-tighter">Cry</span>
+                            </button>
+                            <!-- Row 5: EILIK Style -->
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('neutral')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <rect x="8" y="5" width="84" height="40" rx="10" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Neutral</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('wink')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <rect x="10" y="23" width="80" height="5" rx="2.5" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Wink</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('curious')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M15,3 Q55,0 90,8 Q95,25 90,43 Q55,48 15,45 Q0,28 15,3 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Curious</span>
+                            </button>
+                            <!-- Row 6: More EILIK -->
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('thinking')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M10,3 Q50,0 90,3 Q100,18 90,33 Q50,38 10,33 Q0,18 10,3 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Think</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('skeptic')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M5,15 Q50,8 95,18 Q100,28 95,38 Q50,43 5,38 Q0,28 5,15 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Skeptic</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-yellow-400/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('star')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <polygon points="50,0 60,18 100,20 70,30 80,50 50,38 20,50 30,30 0,20 40,18"
+                                        fill="#fbbf24" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-yellow-400 tracking-tighter">Star</span>
+                            </button>
+                            <!-- Row 7: Cute -->
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-pink-400/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('heart')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M50,8 C30,-5 5,12 50,40 C95,12 70,-5 50,8 Z" fill="#f472b6" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-pink-400 tracking-tighter">Heart</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-pink-300/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('uwu')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M5,30 Q25,15 50,30 Q75,15 95,30 Q75,40 50,30 Q25,40 5,30 Z"
+                                        fill="#f9a8d4" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-pink-300 tracking-tighter">UwU</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('owo')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <ellipse cx="50" cy="25" rx="42" ry="22" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">OwO</span>
+                            </button>
+                            <!-- Row 8: NEW Presets -->
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('shock')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <ellipse cx="50" cy="25" rx="48" ry="24" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Shock</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('focused')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M5,15 L95,15 Q100,25 95,35 L5,35 Q0,25 5,15 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Focus</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('tired')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M0,30 L100,25 Q100,43 50,45 Q0,43 0,30 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Tired</span>
+                            </button>
+                            <!-- Row 9: More NEW -->
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('scared')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M50,3 Q85,3 95,18 Q100,30 90,43 Q50,48 10,43 Q0,30 5,18 Q15,3 50,3 Z"
+                                        fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Scared</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('annoyed')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M5,20 L95,18 Q100,25 95,33 L5,30 Q0,25 5,20 Z" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Annoyed</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('closed')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <rect x="5" y="23" width="90" height="4" rx="2" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Closed</span>
+                            </button>
+                            <!-- Row 10: Final -->
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-red-400/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('glare')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M0,18 L100,18 Q100,40 50,42 Q0,40 0,18 Z" fill="#f87171"
+                                        transform="rotate(15 50 25)" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-red-400 tracking-tighter">Glare</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-blue-300/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('pleading')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <path d="M50,0 C90,5 100,20 95,35 Q50,50 5,35 C0,20 10,5 50,0 Z" fill="#93c5fd" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-blue-300 tracking-tighter">Plead</span>
+                            </button>
+                            <button
+                                class="eye-preset group/item p-2 bg-zinc-900/50 border border-white/5 rounded-xl hover:border-accent/50 hover:bg-zinc-900 transition-all text-left hover:scale-[1.02] active:scale-95"
+                                onclick="applyEyePreset('dot')">
+                                <svg viewBox="0 0 100 50"
+                                    class="w-full h-8 drop-shadow-sm opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <circle cx="50" cy="25" r="15" fill="#00ffff" />
+                                </svg>
+                                <span
+                                    class="text-[8px] font-black text-zinc-600 uppercase mt-1 block group-hover/item:text-accent tracking-tighter">Dot</span>
                             </button>
                         </div>
 
