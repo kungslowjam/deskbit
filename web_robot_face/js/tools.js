@@ -5,11 +5,13 @@ import { updateFrameInfo, updateToolButtons, updateLayersPanel, showToast, updat
 import { renderTimeline } from './timeline.js';
 import { Shape, Frame } from './models.js';
 import { undo, redo, saveUndo } from './history.js';
+import { EYE_PATHS, EYE_ROTATIONS, ANIMATION_TEMPLATES } from './data/presets.js';
 
 let canvas = null;
 
 export function initTools(c) {
     canvas = c;
+    state.EYE_PATHS = EYE_PATHS; // Share with state for timeline renderer
     setupEventListeners();
 }
 
@@ -141,11 +143,23 @@ export function setupEventListeners() {
 
         // Select Tool Logic (Selection, Moving, Resizing)
         if (state.currentTool === 'select') {
+            // Ensure state integrity
+            if (!state.selectedShapes) state.selectedShapes = [];
+
+            // Sync legacy single-select if needed
+            if (state.selectedShape && state.selectedShapes.length === 0) {
+                state.selectedShapes = [state.selectedShape];
+            } else if (state.selectedShape && !state.selectedShapes.some(s => s.id === state.selectedShape.id)) {
+                // If primary is set but missing from list, add it or reset list?
+                // Let's assume list is source of truth, but if empty, take primary.
+                state.selectedShapes.push(state.selectedShape);
+            }
+
             const mx = coords.x;
             const my = coords.y;
 
-            // Check Resize Handles first
-            if (state.selectedShape) {
+            // Check Resize Handles first (Only for primary selection 'selectedShape')
+            if (state.selectedShape && state.selectedShapes.length === 1) { // Only resize if single selection
                 const s = state.selectedShape;
                 const b = s.getBounds(); // x,y,width,height
                 const p = 4; // padding used in renderer
@@ -174,6 +188,7 @@ export function setupEventListeners() {
             const frame = state.frames[state.currentFrameIndex];
             let clickedShape = null;
             if (frame.shapes) {
+                // Check from top (last drawn) to bottom
                 for (let i = frame.shapes.length - 1; i >= 0; i--) {
                     if (frame.shapes[i].containsPoint(coords.x, coords.y)) {
                         clickedShape = frame.shapes[i];
@@ -181,10 +196,58 @@ export function setupEventListeners() {
                     }
                 }
             }
-            state.selectedShape = clickedShape;
-            state.isDraggingShape = !!clickedShape;
-            state.mouseDownOffset = clickedShape ? { x: coords.x - clickedShape.x, y: coords.y - clickedShape.y } : { x: 0, y: 0 };
+
+            // Multi-Select Logic
+            if (clickedShape) {
+                if (e.ctrlKey || e.shiftKey) {
+                    // Toggle Selection works differently for group add
+                    const existingIdx = state.selectedShapes.findIndex(s => s.id === clickedShape.id);
+                    if (existingIdx !== -1) {
+                        // Already selected -> Deselect
+                        state.selectedShapes.splice(existingIdx, 1);
+                    } else {
+                        // Add to selection
+                        state.selectedShapes.push(clickedShape);
+                    }
+                    // Update Primary (last one usually)
+                    state.selectedShape = state.selectedShapes.length > 0 ? state.selectedShapes[state.selectedShapes.length - 1] : null;
+                } else {
+                    // Normal Click
+                    // If clicking a shape that is ALREADY part of the selection, allow dragging the whole group
+                    // BUT only if we don't click a new one.
+                    const isAlreadySelected = state.selectedShapes.some(s => s.id === clickedShape.id);
+
+                    if (!isAlreadySelected) {
+                        // Clicked a new unselected shape -> Clear and Select New
+                        state.selectedShapes = [clickedShape];
+                        state.selectedShape = clickedShape;
+                    } else {
+                        // Clicked an already selected shape -> Keep selection (allows drag), but update primary?
+                        state.selectedShape = clickedShape;
+                    }
+                }
+            } else {
+                // Clicked Empty Space
+                if (!e.ctrlKey && !e.shiftKey) {
+                    state.selectedShapes = [];
+                    state.selectedShape = null;
+                }
+            }
+
+            state.isDraggingShape = !!state.selectedShape;
+
+            // Prepare Drag Offsets for ALL selected shapes
+            // Note: state.selectedShapes contains REFERENCES to objects in state.frames
+            if (state.isDraggingShape) {
+                state.dragOffsets = state.selectedShapes.map(s => ({
+                    id: s.id,
+                    dx: coords.x - s.x,
+                    dy: coords.y - s.y
+                }));
+            }
+
             updateInteractionEditor();
+            updateLayersPanel(); // Refresh selection UI
             if (state.actions.renderEditor) state.actions.renderEditor();
             return;
         }
@@ -230,9 +293,17 @@ export function setupEventListeners() {
             state.lastCoords = coords;
         }
 
-        if (state.isDraggingShape && state.selectedShape) {
-            state.selectedShape.x = coords.x - state.mouseDownOffset.x;
-            state.selectedShape.y = coords.y - state.mouseDownOffset.y;
+        // Group Dragging Logic
+        if (state.isDraggingShape && state.dragOffsets && state.dragOffsets.length > 0) {
+            state.dragOffsets.forEach(offset => {
+                // Find the live shape object (it might have changed if we supported deeper updates, but refs should hold)
+                // Just lookup by ID to be safe if refs were lost (unlikely here but good practice)
+                const s = state.selectedShapes.find(shp => shp.id === offset.id);
+                if (s) {
+                    s.x = coords.x - offset.dx;
+                    s.y = coords.y - offset.dy;
+                }
+            });
             if (state.actions.renderEditor) state.actions.renderEditor();
         }
     };
@@ -245,6 +316,7 @@ export function setupEventListeners() {
         state.draggingHandle = null;
         state.resizeStartShape = null;
         state.lastCoords = null;
+        state.dragOffsets = null; // Clear dragging offsets
 
         // Finalize Shape Creation
         if (state.currentTool.endsWith('-obj') && state.shapeStartCoords) {
@@ -260,6 +332,7 @@ export function setupEventListeners() {
 
                 state.frames[state.currentFrameIndex].shapes.push(newShape);
                 state.selectedShape = newShape;
+                state.selectedShapes = [newShape]; // Auto-select new shape
                 state.currentTool = 'select'; // Switch to select after drawing
                 updateToolButtons();
                 updateLayersPanel();
@@ -301,133 +374,8 @@ export function applyEyePreset(type) {
     const w = 160;
     const h = 130;
 
-    // Normalized Paths (0-100 coordinate space) - High Fidelity EMO/EILIK Style
-    const paths = {
-        // === Original EMO Style ===
-        // Angry: Sharp Crescent
-        angry: "M0,30 L100,30 Q100,100 50,100 Q0,100 0,30 Z",
-        // Alert: Wide Egg
-        alert: "M50,5 C80,5 100,35 100,65 C100,90 80,100 50,100 C20,100 0,90 0,65 C0,35 20,5 50,5 Z",
-        // Sad/Neutral: Friendly Squircle
-        sad: "M10,15 Q50,5 90,15 Q100,50 90,85 Q50,95 10,85 Q0,50 10,15 Z",
-        // Evil: Thin Fox Eye
-        evil: "M0,50 Q50,25 100,50 Q50,75 0,50 Z",
-        // Bean: Perfect Half-Round (Sleepy)
-        bean: "M2,50 L98,50 Q98,100 50,100 Q2,100 2,50 Z",
-        // Slit: Clean Rounded Bar
-        slit: "M5,42 L95,42 Q100,42 100,50 Q100,58 95,58 L5,58 Q0,58 0,50 Q0,42 5,42 Z",
-        // Happy: Curved Arc (Smile Eyes)
-        happy: "M5,70 Q50,20 95,70 Q50,50 5,70 Z",
-        // Love: Heart Shape
-        love: "M50,20 C20,-10 -10,30 50,80 C110,30 80,-10 50,20 Z",
-        // Sleepy: Droopy Half-Closed
-        sleepy: "M5,55 L95,45 Q95,80 50,85 Q5,80 5,55 Z",
-        // Bored: Flat Line
-        bored: "M5,45 L95,45 Q100,50 95,55 L5,55 Q0,50 5,45 Z",
-        // Excited: Big Round
-        excited: "M50,0 C85,0 100,25 100,50 C100,75 85,100 50,100 C15,100 0,75 0,50 C0,25 15,0 50,0 Z",
-        // Cry: Sad with Tear Shape
-        cry: "M10,10 Q50,0 90,10 Q100,45 90,80 Q50,95 10,80 Q0,45 10,10 Z",
-
-        // === NEW EILIK Style Presets ===
-        // Neutral: Rounded Rectangle (EILIK's default look)
-        neutral: "M15,10 L85,10 Q100,10 100,25 L100,75 Q100,90 85,90 L15,90 Q0,90 0,75 L0,25 Q0,10 15,10 Z",
-        // Wink: One eye closed (use for right eye)
-        wink: "M10,48 L90,48 Q95,50 90,52 L10,52 Q5,50 10,48 Z",
-        // Curious: Raised brow effect
-        curious: "M20,5 Q60,0 95,15 Q100,50 95,85 Q60,95 20,90 Q0,55 20,5 Z",
-        // Thinking: Looking up
-        thinking: "M10,5 Q50,0 90,5 Q100,35 90,65 Q50,75 10,65 Q0,35 10,5 Z",
-        // Skeptic: One raised eyebrow
-        skeptic: "M5,30 Q50,15 95,35 Q100,55 95,75 Q50,85 5,75 Q0,55 5,30 Z",
-        // Dead: X shape
-        dead: "M20,20 L50,50 L80,20 M20,80 L50,50 L80,80",
-        // Dizzy: Spiral-ish
-        dizzy: "M50,10 Q80,10 90,30 Q95,60 70,80 Q40,90 20,70 Q10,45 30,25 Q45,15 60,25 Q70,40 55,55 Q40,65 30,50 Q25,35 40,30 Q50,28 55,40 Z",
-        // Heart Eyes: Filled hearts
-        heart: "M50,15 C30,-5 5,20 50,65 C95,20 70,-5 50,15 Z",
-        // Star Eyes
-        star: "M50,0 L60,35 L100,40 L70,60 L80,100 L50,75 L20,100 L30,60 L0,40 L40,35 Z",
-        // Question: Confused
-        question: "M30,10 Q70,5 80,30 Q85,50 55,60 L55,70 M55,80 L55,90",
-        // Dot: Minimal
-        dot: "M35,35 Q50,20 65,35 Q80,50 65,65 Q50,80 35,65 Q20,50 35,35 Z",
-        // UwU: Cute squiggly
-        uwu: "M5,60 Q25,40 50,60 Q75,40 95,60 Q75,75 50,60 Q25,75 5,60 Z",
-        // OwO: Big round cute
-        owo: "M50,5 C85,5 100,30 100,55 C100,80 85,100 50,100 C15,100 0,80 0,55 C0,30 15,5 50,5 Z",
-
-        // === NEW Essential Presets ===
-        // Shock: Very wide open
-        shock: "M50,0 C90,0 100,20 100,50 C100,80 90,100 50,100 C10,100 0,80 0,50 C0,20 10,0 50,0 Z",
-        // Focused: Slightly narrowed, determined
-        focused: "M5,30 L95,30 Q100,50 95,70 L5,70 Q0,50 5,30 Z",
-        // Tired: Heavy droopy
-        tired: "M0,60 L100,50 Q100,85 50,90 Q0,85 0,60 Z",
-        // Scared: Wide but trembling shape
-        scared: "M50,5 Q85,5 95,35 Q100,60 90,85 Q50,95 10,85 Q0,60 5,35 Q15,5 50,5 Z",
-        // Annoyed: Half-lidded, unimpressed
-        annoyed: "M5,40 L95,35 Q100,50 95,65 L5,60 Q0,50 5,40 Z",
-        // Shy: Small and looking away
-        shy: "M30,30 Q50,25 70,35 Q80,55 70,75 Q50,80 30,70 Q20,50 30,30 Z",
-        // Loading: Circular progress style
-        loading: "M50,10 A40,40 0 1,1 50,90 A40,40 0 1,1 50,10 Z",
-        // Closed: Completely shut
-        closed: "M5,48 L95,48 Q100,50 95,52 L5,52 Q0,50 5,48 Z",
-        // Squint: Almost closed, suspicious
-        squint: "M5,45 L95,42 Q100,50 95,58 L5,55 Q0,50 5,45 Z",
-        // Glare: Sharp angry stare
-        glare: "M0,35 L100,35 Q100,75 50,80 Q0,75 0,35 Z",
-        // Pleading: Puppy eyes
-        pleading: "M50,0 C90,10 100,40 95,70 Q50,100 5,70 C0,40 10,10 50,0 Z",
-        // Sparkle: Excited with highlight
-        sparkle: "M50,5 C80,5 100,30 100,55 C100,80 80,100 50,100 C20,100 0,80 0,55 C0,30 20,5 50,5 Z"
-    };
-
-    const rotations = {
-        angry: { left: 25, right: -25 },
-        evil: { left: 15, right: -15 },
-        sad: { left: -10, right: 10 },
-        happy: { left: 0, right: 0 },
-        love: { left: 0, right: 0 },
-        sleepy: { left: 5, right: -5 },
-        bored: { left: 0, right: 0 },
-        excited: { left: -5, right: 5 },
-        cry: { left: -15, right: 15 },
-        alert: { left: 0, right: 0 },
-        bean: { left: 0, right: 0 },
-        slit: { left: 0, right: 0 },
-        // EILIK-style rotations
-        neutral: { left: 0, right: 0 },
-        wink: { left: 0, right: 0 },
-        curious: { left: -8, right: 8 },
-        thinking: { left: 0, right: 0 },
-        skeptic: { left: -12, right: 5 },
-        dead: { left: 0, right: 0 },
-        dizzy: { left: 15, right: -15 },
-        heart: { left: 0, right: 0 },
-        star: { left: 5, right: -5 },
-        question: { left: 0, right: 0 },
-        dot: { left: 0, right: 0 },
-        uwu: { left: 0, right: 0 },
-        owo: { left: 0, right: 0 },
-        // New presets rotations
-        shock: { left: 0, right: 0 },
-        focused: { left: 0, right: 0 },
-        tired: { left: 8, right: -8 },
-        scared: { left: -5, right: 5 },
-        annoyed: { left: 5, right: -5 },
-        shy: { left: 15, right: -15 },
-        loading: { left: 0, right: 0 },
-        closed: { left: 0, right: 0 },
-        squint: { left: 3, right: -3 },
-        glare: { left: 20, right: -20 },
-        pleading: { left: -8, right: 8 },
-        sparkle: { left: -3, right: 3 }
-    };
-
     const createEye = (isRight) => {
-        const pathData = paths[type] || paths.sad;
+        const pathData = EYE_PATHS[type] || EYE_PATHS.sad;
         const x = isRight ? centerX + padding : centerX - padding - w;
         const y = centerY - (h / 2);
 
@@ -435,7 +383,7 @@ export function applyEyePreset(type) {
         s.pathData = pathData;
 
         // Dynamic Rotation
-        const rot = rotations[type] || { left: 0, right: 0 };
+        const rot = EYE_ROTATIONS[type] || { left: 0, right: 0 };
         s.rotation = isRight ? rot.right : rot.left;
 
         if (isRight) {
@@ -477,186 +425,8 @@ export function applyAnimationPreset(type, options = {}) {
             intensity: options.intensity || 1.0  // Intensity multiplier (0.5 = subtle, 2.0 = exaggerated)
         };
 
-        // Animation Templates - Define timing and transformations as parameters
-        const animationTemplates = {
-            wink: {
-                frames: [
-                    { duration: 300, easing: 'linear', transform: 'reset' },
-                    { duration: 80, easing: 'ease-out', transform: { type: 'squash', target: 'right', factor: 0.8 } },
-                    { duration: 60, easing: 'ease-out', transform: { type: 'squash', target: 'right', factor: 0.1 } },
-                    { duration: 80, easing: 'linear', transform: { type: 'squash', target: 'right', factor: 0.1 } },
-                    { duration: 120, easing: 'overshoot', transform: { type: 'squash', target: 'right', factor: 1.1 } },
-                    { duration: 150, easing: 'ease-out', transform: 'reset' }
-                ]
-            },
-            blink: {
-                frames: [
-                    { duration: 400, easing: 'linear', transform: 'reset' },
-                    { duration: 50, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.8 } },
-                    { duration: 40, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } },
-                    { duration: 30, easing: 'linear', transform: { type: 'squash', target: 'both', factor: 0.1 } },
-                    { duration: 100, easing: 'overshoot', transform: { type: 'squash', target: 'both', factor: 1.1 } },
-                    { duration: 120, easing: 'ease-out', transform: 'reset' }
-                ]
-            },
-            surprise: {
-                frames: [
-                    { duration: 80, easing: 'linear', transform: 'reset' },
-                    { duration: 80, easing: 'overshoot', transform: { type: 'translate', y: -8, scale: { w: 1.1, h: 1.2 } } },
-                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -5, scale: { w: 1.05, h: 1.1 } } },
-                    { duration: 600, easing: 'linear', transform: { type: 'translate', y: -4 } },
-                    { duration: 250, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            happy: {
-                frames: [
-                    { duration: 150, easing: 'linear', transform: 'reset' },
-                    { duration: 100, easing: 'overshoot', transform: { type: 'translate', y: -10 } },
-                    { duration: 80, easing: 'linear', transform: { type: 'translate', y: -5 } },
-                    { duration: 80, easing: 'linear', transform: { type: 'translate', y: -7 } },
-                    { duration: 600, easing: 'linear', transform: { type: 'translate', y: -3 } },
-                    { duration: 300, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            sad: {
-                frames: [
-                    { duration: 250, easing: 'linear', transform: 'reset' },
-                    { duration: 400, easing: 'ease-out', transform: { type: 'translate', y: 8, rotate: { left: -10, right: 10 } } },
-                    { duration: 200, easing: 'linear', transform: { type: 'translate', y: 10, x: 1, rotate: { left: -12, right: 12 } } },
-                    { duration: 200, easing: 'linear', transform: { type: 'translate', y: 9, x: -1, rotate: { left: -10, right: 10 } } },
-                    { duration: 400, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            nod: {
-                frames: [
-                    { duration: 150, easing: 'ease-in-out', transform: 'reset' },
-                    { duration: 100, easing: 'ease-out', transform: { type: 'translate', y: 15 } },
-                    { duration: 80, easing: 'ease-in', transform: { type: 'translate', y: 5 } },
-                    { duration: 100, easing: 'ease-out', transform: { type: 'translate', y: 12 } },
-                    { duration: 150, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            shake: {
-                frames: [
-                    { duration: 80, easing: 'linear', transform: 'reset' },
-                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: -10 } },
-                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: 10 } },
-                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: -8 } },
-                    { duration: 50, easing: 'ease-out', transform: { type: 'translate', x: 8 } },
-                    { duration: 120, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            skeptic: {
-                frames: [
-                    { duration: 200, easing: 'linear', transform: 'reset' },
-                    { duration: 180, easing: 'ease-out', transform: { type: 'squash-asymmetric', left: { squash: 1.0 }, right: { squash: 0.7, rotate: -10 } } },
-                    { duration: 800, easing: 'linear', transform: { type: 'squash-asymmetric', left: { rotate: 5 }, right: { squash: 0.6, rotate: -12 } } },
-                    { duration: 300, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            love: {
-                frames: [
-                    { duration: 150, easing: 'linear', transform: 'reset' },
-                    { duration: 150, easing: 'overshoot', transform: { type: 'translate', scale: { w: 1.2, h: 1.2 } } },
-                    { duration: 120, easing: 'ease-out', transform: { type: 'translate', scale: { w: 1.05, h: 1.05 } } },
-                    { duration: 120, easing: 'ease-in', transform: { type: 'translate', scale: { w: 1.15, h: 1.15 } } },
-                    { duration: 120, easing: 'ease-out', transform: { type: 'translate', scale: { w: 1.05, h: 1.05 } } },
-                    { duration: 400, easing: 'linear', transform: 'reset' }
-                ]
-            },
-            angry: {
-                frames: [
-                    { duration: 100, easing: 'linear', transform: 'reset' },
-                    { duration: 80, easing: 'ease-out', transform: { type: 'translate', x: 3 } },
-                    { duration: 60, easing: 'linear', transform: { type: 'translate', x: -3 } },
-                    { duration: 60, easing: 'linear', transform: { type: 'translate', x: 3 } },
-                    { duration: 60, easing: 'linear', transform: { type: 'translate', x: -3 } },
-                    { duration: 600, easing: 'linear', transform: { type: 'translate', scale: { w: 1.05, h: 1.0 } } },
-                    { duration: 300, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            sleepy: {
-                frames: [
-                    { duration: 400, easing: 'linear', transform: 'reset' },
-                    { duration: 500, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.6 } },
-                    { duration: 300, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.4 } },
-                    { duration: 400, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } },
-                    { duration: 600, easing: 'ease-in', transform: { type: 'squash', target: 'both', factor: 0.3 } },
-                    { duration: 800, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } }
-                ]
-            },
-            confused: {
-                frames: [
-                    { duration: 150, easing: 'linear', transform: 'reset' },
-                    { duration: 180, easing: 'ease-out', transform: { type: 'tilt', rotate: 10 } },
-                    { duration: 180, easing: 'ease-out', transform: { type: 'tilt', rotate: -10 } },
-                    { duration: 400, easing: 'linear', transform: 'reset' }
-                ]
-            },
-            excited: {
-                frames: [
-                    { duration: 80, easing: 'linear', transform: 'reset' },
-                    { duration: 60, easing: 'overshoot', transform: { type: 'translate', y: -12 } },
-                    { duration: 50, easing: 'linear', transform: { type: 'translate', y: 8 } },
-                    { duration: 50, easing: 'linear', transform: { type: 'translate', y: -10 } },
-                    { duration: 50, easing: 'linear', transform: { type: 'translate', y: 6 } },
-                    { duration: 400, easing: 'ease-out', transform: 'reset' }
-                ]
-            },
-            idle: {
-                frames: [
-                    { duration: 800, easing: 'ease-in-out', transform: 'reset' },
-                    { duration: 600, easing: 'ease-in-out', transform: { type: 'translate', scale: { w: 1.02, h: 1.02 } } },
-                    { duration: 800, easing: 'ease-in-out', transform: 'reset' },
-                    { duration: 600, easing: 'ease-in-out', transform: { type: 'translate', scale: { w: 1.02, h: 1.02 } } },
-                    { duration: 60, easing: 'ease-out', transform: { type: 'squash', target: 'both', factor: 0.1 } },
-                    { duration: 40, easing: 'linear', transform: { type: 'squash', target: 'both', factor: 0.1 } },
-                    { duration: 100, easing: 'overshoot', transform: 'reset' },
-                    { duration: 600, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            curious: {
-                frames: [
-                    { duration: 200, easing: 'linear', transform: 'reset' },
-                    { duration: 300, easing: 'ease-in-out', transform: { type: 'translate', x: -15, rotate: { left: -5, right: -5 } } },
-                    { duration: 200, easing: 'ease-in-out', transform: 'reset' },
-                    { duration: 300, easing: 'ease-in-out', transform: { type: 'translate', x: 15, rotate: { left: 5, right: 5 } } },
-                    { duration: 200, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            laugh: {
-                frames: [
-                    { duration: 100, easing: 'linear', transform: 'reset' },
-                    { duration: 80, easing: 'ease-out', transform: { type: 'translate', y: -8 } },
-                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -3 } },
-                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -10 } },
-                    { duration: 60, easing: 'linear', transform: { type: 'translate', y: -4 } },
-                    { duration: 300, easing: 'ease-out', transform: 'reset' }
-                ]
-            },
-            bounce: {
-                frames: [
-                    { duration: 100, easing: 'ease-in', transform: { type: 'translate', y: 0, scale: { w: 1.1, h: 0.8 } } },
-                    { duration: 80, easing: 'overshoot', transform: { type: 'translate', y: -20, scale: { w: 0.9, h: 1.1 } } },
-                    { duration: 100, easing: 'ease-in', transform: 'reset' },
-                    { duration: 80, easing: 'overshoot', transform: { type: 'translate', y: -5 } },
-                    { duration: 150, easing: 'ease-in-out', transform: 'reset' }
-                ]
-            },
-            dizzy: {
-                frames: [
-                    { duration: 100, easing: 'linear', transform: 'reset' },
-                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 45 } },
-                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 90 } },
-                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 135 } },
-                    { duration: 150, easing: 'linear', transform: { type: 'rotate-absolute', angle: 180 } },
-                    { duration: 300, easing: 'ease-out', transform: 'reset' }
-                ]
-            }
-        };
-
         // Get template or create a simple default
-        const template = animationTemplates[type] || {
+        const template = ANIMATION_TEMPLATES[type] || {
             frames: [
                 { duration: 500, easing: 'ease-in-out', transform: 'reset' }
             ]
@@ -667,7 +437,7 @@ export function applyAnimationPreset(type, options = {}) {
         const centerX = state.GRID_WIDTH / 2;
 
         saveUndo();
-        const startIndex = state.frames.length;
+        const startIndex = state.currentFrameIndex + 1; // Start applying from AFTER the current frame (NLE style)
 
         // Helper to apply transformations based on template
         const applyTransform = (shape, base, transform, isRight, idx) => {
@@ -737,33 +507,115 @@ export function applyAnimationPreset(type, options = {}) {
         };
 
         // Generate frames from template
-        template.frames.forEach(frameConfig => {
-            const frame = new Frame();
-            frame.duration = Math.round(frameConfig.duration / config.speed);
-            frame.easing = frameConfig.easing || 'linear';
+        template.frames.forEach((frameConfig, i) => {
+            const frameIndex = startIndex + i;
+            let frame;
 
-            frame.shapes = baseShapes.map((base, idx) => {
-                const s = base.clone(true);
+            // Check if we can merge into existing frame
+            if (frameIndex < state.frames.length) {
+                // MERGE MODE: Modify existing frame
+                frame = state.frames[frameIndex];
 
-                // Skip animation for images (keep them static)
-                if (s.type === 'image') return s;
+                // If the frame duration is significantly different, we might want to adjust it?
+                // For now, let's keep the existing frame duration unless it's a single-frame static hold.
+                // But animation presets assume specific timing. 
+                // Let's force update duration if it's the "start" of a new merged sequence?
+                // No, that breaks other tracks. Complex NLE issue.
+                // Compromise: We map the template frame 1:1 to existing frames regardless of duration for now, 
+                // OR we presume the user wants the animation timing more than the old timing.
+                // Let's UPDATE the duration to match the preset if we are overwriting.
+                frame.duration = Math.round(frameConfig.duration / config.speed);
+                frame.easing = frameConfig.easing || 'linear';
+                frame.label = (frame.label ? frame.label + '+' : '') + type.toUpperCase(); // Append label
 
-                const shapeCenterX = s.x + s.width / 2;
-                const isRight = shapeCenterX > centerX;
+                // Re-map shapes based on the NEW base (which is the PREVIOUS frame's state for continuity)
+                // Actually, for merging, we should take the shapes from the CURRENT existing frame 
+                // and just modify the target ones.
 
-                // Only apply animation transform if no shape is selected (apply to all)
-                // OR if this specific shape is the one selected
-                const isSelected = state.selectedShape && s.id === state.selectedShape.id;
-                const shouldAnimate = !state.selectedShape || isSelected;
+                // Find shapes to modify in this existing frame
+                frame.shapes = frame.shapes.map(s => {
+                    const shapeCenterX = s.x + s.width / 2;
+                    const isRight = shapeCenterX > centerX;
+                    let shouldAnimate = false;
 
-                if (shouldAnimate) {
-                    applyTransform(s, base, frameConfig.transform, isRight);
-                }
+                    if (state.selectedShapes && state.selectedShapes.length > 0) {
+                        shouldAnimate = state.selectedShapes.some(sel => sel.id === s.id);
+                    } else if (state.selectedShape) {
+                        shouldAnimate = (s.id === state.selectedShape.id);
+                    } else {
+                        const isKnownEye = Object.values(EYE_PATHS).includes(s.pathData);
+                        if (isKnownEye) shouldAnimate = true;
+                    }
 
-                return s;
-            });
+                    if (shouldAnimate) {
+                        // Apply transform to this shape
+                        // We need a 'base' to transform FROM. 
+                        // Ideally, we transform relative to the shape's state at the START of the animation sequence
+                        // to avoid accumulating errors or "walking" away.
+                        // But existing logic creates absolute frames from a single base.
 
-            state.frames.push(frame);
+                        // Let's use the 'baseShapes' captured at start as the reference "Neutral Pose".
+                        // Find the corresponding base shape
+                        const originalBase = baseShapes.find(b => b.id === s.id) || baseShapes[baseShapes.findIndex(b => b.type === s.type)]; // heuristic fallback
+
+                        if (originalBase) {
+                            // Reset to base + Apply Transform
+                            const temp = originalBase.clone(true);
+                            applyTransform(temp, originalBase, frameConfig.transform, isRight);
+
+                            // Copy properties back to s
+                            s.x = temp.x;
+                            s.y = temp.y;
+                            s.width = temp.width;
+                            s.height = temp.height;
+                            s.rotation = temp.rotation;
+                        } else {
+                            // Just apply relative to itself if no base found (shim)
+                            applyTransform(s, s.clone(), frameConfig.transform, isRight);
+                        }
+                    }
+                    return s;
+                });
+
+            } else {
+                // APPEND MODE: Create new frame (Classic behavior)
+                frame = new Frame();
+                frame.duration = Math.round(frameConfig.duration / config.speed);
+                frame.easing = frameConfig.easing || 'linear';
+                frame.label = type.toUpperCase();
+
+                frame.shapes = baseShapes.map((base, idx) => {
+                    const s = base.clone(true);
+
+                    // Skip animation for images (keep them static)
+                    if (s.type === 'image') return s;
+
+                    const shapeCenterX = s.x + s.width / 2;
+                    const isRight = shapeCenterX > centerX;
+
+                    // Smart Detection Logic
+                    let shouldAnimate = false;
+
+                    if (state.selectedShapes && state.selectedShapes.length > 0) {
+                        shouldAnimate = state.selectedShapes.some(sel => sel.id === s.id);
+                    } else if (state.selectedShape) {
+                        shouldAnimate = (s.id === state.selectedShape.id);
+                    } else {
+                        // 2. Global Mode: Smartly detect "Eyes"
+                        const isKnownEye = Object.values(EYE_PATHS).includes(s.pathData);
+                        if (isKnownEye) {
+                            shouldAnimate = true;
+                        }
+                    }
+
+                    if (shouldAnimate) {
+                        applyTransform(s, base, frameConfig.transform, isRight);
+                    }
+
+                    return s;
+                });
+                state.frames.push(frame);
+            }
         });
 
         state.currentFrameIndex = startIndex;

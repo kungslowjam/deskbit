@@ -185,6 +185,7 @@ export class Frame {
         this.shapes = [];
         this.duration = 100;
         this.id = Date.now() + Math.random();
+        this.label = null; // To identify animation source (e.g. "BLINK")
         this.cacheCanvas = document.createElement('canvas');
         this.cacheCanvas.width = state.GRID_WIDTH;
         this.cacheCanvas.height = state.GRID_HEIGHT;

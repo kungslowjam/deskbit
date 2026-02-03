@@ -6,19 +6,23 @@ export const state = {
     // Global Actions (Dependency Injection to avoid cycles)
     actions: {},
 
-    // Project state
-    projectStates: [],
-    activeStateId: null,
-    frames: [],
+    // Data
+    frames: [], // Array of Frame objects
     currentFrameIndex: 0,
+    projectStates: [], // Array of State objects { id, name, frames, ... }
+    activeStateId: null, // ID of the currently active state (e.g. 'neutral', 'happy')
+    EYE_PATHS: {}, // Placeholder, populated from presets.js usually but needed for safe access
 
-    // Editor state
-    isDrawing: false,
+    // Playback
+    isPlaying: false,
     currentTool: 'pen',
     currentColor: '#00ffff',
     brushSize: 1,
     isSymmetryEnabled: false,
     lastCoords: null,
+
+    // Editor state
+    isDrawing: false,
 
     // Shape Defaults
     shapeDefaults: {
@@ -31,7 +35,8 @@ export const state = {
     },
 
     // Selection & Clipboard
-    selectedShape: null,
+    selectedShape: null, // Primary selection (for property editor)
+    selectedShapes: [],  // All selected shapes (for multi-select actions)
     copiedFrameData: null,
     selectedFrames: [],
     clipboard: [],

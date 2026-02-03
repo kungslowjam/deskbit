@@ -420,6 +420,119 @@
             border: 2px solid var(--bg-panel);
             box-shadow: 0 0 10px var(--accent);
         }
+
+        /* Timeline Multi-Track Styles */
+        .timeline-row {
+            display: flex;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.2);
+            position: relative;
+            min-width: fit-content;
+            /* Ensure row expands to content */
+        }
+
+        .timeline-row:nth-child(even) {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .track-label {
+            font-family: 'JetBrains Mono', monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 120px;
+            flex-shrink: 0;
+            padding: 0 8px;
+            font-size: 10px;
+            color: #888;
+            border-right: 1px solid #333;
+            display: flex;
+            align-items: center;
+            height: 32px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .track-label:hover {
+            color: #fff;
+            background: #222 !important;
+        }
+
+        .sticky-label {
+            position: sticky;
+            left: 0;
+            z-index: 20;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .master-row {
+            height: auto !important;
+            /* Let content dictate or set fixed */
+            background: transparent !important;
+            margin-bottom: 4px;
+        }
+
+        .master-row .track-label {
+            height: 95px;
+            /* Match height of master frames */
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .track-content {
+            position: relative;
+            flex-grow: 1;
+            height: 32px;
+            /* Fixed height for object tracks */
+        }
+
+        .master-row .track-content {
+            height: 95px;
+        }
+
+        /* Clips */
+        .timeline-clip {
+            position: absolute;
+            top: 4px;
+            bottom: 4px;
+            background: rgba(0, 210, 255, 0.2);
+            border: 1px solid rgba(0, 210, 255, 0.4);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.1s;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            padding: 0 6px;
+        }
+
+        .timeline-clip:hover {
+            background: rgba(0, 210, 255, 0.3);
+            border-color: rgba(0, 210, 255, 0.8);
+            z-index: 5;
+        }
+
+        .timeline-clip.selected {
+            background: #00d2ff;
+            border-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.4);
+            z-index: 10;
+        }
+
+        .clip-name {
+            font-size: 9px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: rgba(255, 255, 255, 0.7);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
+        }
+
+        .timeline-clip.selected .clip-name {
+            color: #000;
+        }
     </style>
     <script>
         tailwind.config = {

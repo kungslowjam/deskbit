@@ -207,7 +207,7 @@ static void polygon_draw_event_cb(lv_event_t *e) {
       }
     }
 
-    // Fill
+    // Fill (Scanlines)
     for (int i = 0; i < count; i += 2) {
       if (i + 1 < count) {
         lv_area_t strip;
@@ -217,6 +217,30 @@ static void polygon_draw_event_cb(lv_event_t *e) {
         strip.x2 = intersections[i + 1];
         lv_draw_rect(draw_ctx, &draw_dsc, &strip);
       }
+    }
+  }
+
+  // --- AA IMPROVEMENT: Draw Outline for Smooth Edges ---
+  // Using lv_draw_line (which uses AA) to smooth out the jagged scanline edges
+  lv_draw_line_dsc_t line_dsc;
+  lv_draw_line_dsc_init(&line_dsc);
+  line_dsc.color =
+      item->color == 0 ? lv_color_make(0, 0, 0) : lv_color_hex(item->color);
+  // Note: Using the FILL color for the outline to smooth edges
+  line_dsc.color = draw_dsc.bg_color;
+  line_dsc.width = 2; // 2px width provides good coverage for AA
+  line_dsc.opa = item->opa;
+  line_dsc.round_start = 1;
+  line_dsc.round_end = 1;
+
+  for (int i = 0; i < pt_count; i++) {
+    int next = (i + 1) % pt_count;
+    lv_point_t p1 = rot_pts[i];
+    lv_point_t p2 = rot_pts[next];
+
+    // Only draw if points are distinct to save perf
+    if (p1.x != p2.x || p1.y != p2.y) {
+      lv_draw_line(draw_ctx, &line_dsc, &p1, &p2);
     }
   }
 }
@@ -554,8 +578,10 @@ void anim_manager_update(void) {
         lv_obj_set_user_data(o, (void *)s1);
 
         // Apply Stroke
-        if (s1->stroke_width > 0 &&
-            s1->type != 5) { // No border for images usually
+        // FIX: Only apply LVGL border style to RECT/IMAGE.
+        // For PATH/ELLIPSE, we draw them manually, so standard border would
+        // look like a bounding box.
+        if (s1->stroke_width > 0 && (s1->type == 0)) { // 0=RECT only
           lv_obj_set_style_border_width(o, (lv_coord_t)s1->stroke_width, 0);
           lv_obj_set_style_border_color(o, lv_color_hex(s1->stroke_color), 0);
           lv_obj_set_style_border_opa(o, (uint8_t)opa, 0);

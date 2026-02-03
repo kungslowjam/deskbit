@@ -80,31 +80,46 @@ export function renderEditor() {
     }
 
     // Selection Box
-    if (state.selectedShape) {
-        const bounds = state.selectedShape.getBounds();
-        const padding = 4;
+    if (state.selectedShapes && state.selectedShapes.length > 0) {
+        state.selectedShapes.forEach(shape => {
+            // Determine if this is the primary selected shape (for handles)
+            const isPrimary = (shape === state.selectedShape);
+            // In multi-select, we might not show handles for clarity, or only for primary.
+            // Current tools.js only allows resizing if single selection is active.
+            const showHandles = isPrimary && state.selectedShapes.length === 1;
 
-        ctx.strokeStyle = '#00d2ff';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 3]);
-        ctx.strokeRect(
-            bounds.x - padding,
-            bounds.y - padding,
-            bounds.width + padding * 2,
-            bounds.height + padding * 2
-        );
-        ctx.setLineDash([]);
+            const bounds = shape.getBounds();
+            const padding = 4;
 
-        const handleSize = 8;
-        ctx.fillStyle = '#00d2ff';
-        const corners = [
-            { x: bounds.x - padding, y: bounds.y - padding },
-            { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y - padding },
-            { x: bounds.x - padding, y: bounds.y + bounds.height + padding - handleSize },
-            { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y + bounds.height + padding - handleSize }
-        ];
-        corners.forEach(corner => {
-            ctx.fillRect(corner.x, corner.y, handleSize, handleSize);
+            ctx.save();
+            ctx.strokeStyle = '#00d2ff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]);
+
+            // Dim secondary selections slightly?
+            if (!isPrimary) ctx.globalAlpha = 0.6;
+
+            ctx.strokeRect(
+                bounds.x - padding,
+                bounds.y - padding,
+                bounds.width + padding * 2,
+                bounds.height + padding * 2
+            );
+            ctx.restore();
+
+            if (showHandles) {
+                const handleSize = 8;
+                ctx.fillStyle = '#00d2ff';
+                const corners = [
+                    { x: bounds.x - padding, y: bounds.y - padding },
+                    { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y - padding },
+                    { x: bounds.x - padding, y: bounds.y + bounds.height + padding - handleSize },
+                    { x: bounds.x + bounds.width + padding - handleSize, y: bounds.y + bounds.height + padding - handleSize }
+                ];
+                corners.forEach(corner => {
+                    ctx.fillRect(corner.x, corner.y, handleSize, handleSize);
+                });
+            }
         });
     }
 
@@ -214,6 +229,9 @@ export function renderPreview(frameIndex, interpolation = null) {
                     fontSize: s1.fontSize,
                     pathData: s1.pathData,
                     isMirrored: s1.isMirrored,
+                    // Fix: Preserve image data for ImageShapes
+                    image: s1.image,
+                    isLoaded: s1.isLoaded,
                     lineEnd: (s1.type === 'line' && s1.lineEnd && s2.lineEnd) ? {
                         x: lerp(s1.lineEnd.x, s2.lineEnd.x, t),
                         y: lerp(s1.lineEnd.y, s2.lineEnd.y, t)

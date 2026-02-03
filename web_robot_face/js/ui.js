@@ -91,8 +91,10 @@ export function updateLayersPanel() {
         const icon = shape.type === 'ellipse' ? '○' :
             shape.type === 'rect' ? '▢' :
                 shape.type === 'line' ? '╱' :
-                    shape.type === 'text' ? 'T' : '?';
-        const isActive = state.selectedShape && state.selectedShape.id === shape.id;
+                    shape.type === 'text' ? 'T' :
+                        shape.type === 'image' ? '🖼️' : '★';
+        // Support multi-selection highlight
+        const isActive = state.selectedShapes.some(s => s.id === shape.id);
         return `<div class="layer-item ${isActive ? 'active' : ''}" data-index="${i}">
             <span class="layer-icon">${icon}</span>
             <span class="layer-name">${shape.type} ${i + 1}</span>
@@ -101,13 +103,27 @@ export function updateLayersPanel() {
     }).reverse().join('');
 
     listEl.querySelectorAll('.layer-item').forEach(item => {
-        item.onclick = () => {
+        item.onclick = (e) => {
             const idx = parseInt(item.dataset.index);
-            state.selectedShape = state.frames[state.currentFrameIndex].shapes[idx];
-            state.currentTool = 'select'; // Ensure select tool is active
+            const shape = state.frames[state.currentFrameIndex].shapes[idx];
+
+            if (e.ctrlKey || e.shiftKey) {
+                const existingIdx = state.selectedShapes.findIndex(s => s.id === shape.id);
+                if (existingIdx !== -1) {
+                    state.selectedShapes.splice(existingIdx, 1);
+                } else {
+                    state.selectedShapes.push(shape);
+                }
+                state.selectedShape = state.selectedShapes.length > 0 ? state.selectedShapes[state.selectedShapes.length - 1] : null;
+            } else {
+                state.selectedShapes = [shape];
+                state.selectedShape = shape;
+            }
+
+            state.currentTool = 'select';
             if (state.actions.renderEditor) state.actions.renderEditor();
             updateLayersPanel();
-            updateInteractionEditor(); // Sync color picker with selected shape
+            updateInteractionEditor();
         };
     });
 }

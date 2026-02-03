@@ -17,6 +17,7 @@ export function setHistoryRefreshCallback(cb) {
 export function serializeFrame(frame) {
     return {
         duration: frame.duration,
+        label: frame.label, // Save label
         pixels: [...frame.pixels],
         shapes: frame.shapes.map(s => s.clone(true))
     };
@@ -24,6 +25,7 @@ export function serializeFrame(frame) {
 
 export function restoreFrame(frame, data) {
     frame.duration = data.duration;
+    frame.label = data.label || null; // Restore label
     frame.pixels = [...data.pixels];
     frame.shapes = data.shapes.map(s => s.clone(true));
     frame.isCacheDirty = true;
