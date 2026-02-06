@@ -504,6 +504,18 @@ export function applyAnimationPreset(type, options = {}) {
                 // Absolute rotation (for dizzy spin)
                 shape.rotation = transform.angle * config.intensity;
             }
+
+            // Path Swapping (New Feature for Dizzy Animation)
+            if (transform.path) {
+                // If path is specified, replace the shape's path data
+                // This allows frame-by-frame animation of the shape itself
+                const newPath = EYE_PATHS[transform.path] || transform.path;
+                if (newPath) {
+                    shape.pathData = newPath;
+                    // Reset cache to ensure redraw
+                    if (shape.isCacheDirty !== undefined) shape.isCacheDirty = true;
+                }
+            }
         };
 
         // Generate frames from template

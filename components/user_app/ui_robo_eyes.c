@@ -148,6 +148,7 @@ extern const uint8_t my_anim_f1_shape_count;
 extern const uint8_t my_anim_f2_shape_count;
 extern const uint32_t my_anim_total_duration;
 extern const anim_vector_t angry_anim_data; // New Angry Animation Data
+extern const anim_vector_t dizzy_anim_data; // New Dizzy/Seething Animation Data
 
 // State
 typedef enum {
@@ -161,6 +162,7 @@ typedef enum {
   EMO_CUSTOM
 } emotion_t;
 static emotion_t current_emotion = EMO_IDLE;
+static robot_emotion_t last_api_emotion = (robot_emotion_t)-1; // Global guard
 static int timer_ms = 0;
 static int breath_phase = 0;
 // Removed static int16_t gaze_x/y as we use floats now
@@ -576,18 +578,26 @@ static void update_positions(void) {
       hide_laugh();
       hide_love();
       hide_sleep();
-      hide_angry();
-      current_emotion = EMO_CUSTOM;
+      // DO NOT call hide_angry() here if we ARE in EMO_ANGRY,
+      // as it might contain logic we want to preserve or would interfere.
+      if (current_emotion != EMO_ANGRY) {
+        hide_angry();
+        current_emotion = EMO_CUSTOM;
+      }
       timer_ms = 0;
     }
     was_anim_playing = true;
     return; // SKIP PROCEDURAL EYE LOGIC
   } else if (was_anim_playing) {
-    // Just finished custom animation, return to normal
-    show_idle();
-    current_emotion = EMO_IDLE;
-    timer_ms = 0;
+    // Just finished custom animation
     was_anim_playing = false;
+
+    // Don't auto-reset if we are in a multi-phase emotion like EMO_ANGRY
+    if (current_emotion != EMO_ANGRY) {
+      show_idle();
+      current_emotion = EMO_IDLE;
+      timer_ms = 0;
+    }
   }
 
   // Global Breathe Wave (used by Normal, Happy, Sleep)
@@ -689,6 +699,11 @@ static void update_positions(void) {
                    breath_offset + gaze_y + 10);
 
   } else if (current_emotion == EMO_ANGRY) {
+    // Only run procedural seething in Phase 0
+    if (angry_phase != 0) {
+      return;
+    }
+
     int16_t zoom_val = 256;
 
     update_angry_physics(timer_ms, &shake_y, &zoom_val);
@@ -1422,13 +1437,19 @@ static void show_angry(void) {
 }
 
 static void hide_angry(void) {
-  // Hide Blue components
+  // Hide Blue procedural components
   if (left_angry_blue_eye)
     lv_obj_add_flag(left_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
   if (right_angry_blue_eye)
     lv_obj_add_flag(right_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
   if (angry_blue_mouth)
     lv_obj_add_flag(angry_blue_mouth, LV_OBJ_FLAG_HIDDEN);
+
+  // Restore normal eyes if they were hidden for the vector burst
+  if (left_eye)
+    lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
+  if (right_eye)
+    lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void anim_heart_scale_cb(void *var, int32_t v) {
@@ -1683,7 +1704,8 @@ static void switch_to_next_emotion(void) {
     break;
   case EMO_ANGRY:
     hide_angry();
-    show_idle(); // Restore normal state
+    anim_manager_stop(); // Explicitly stop manager when LEAVING angry
+    show_idle();         // Restore normal state
     current_emotion = EMO_IDLE;
     break;
   case EMO_CUSTOM:
@@ -1697,6 +1719,8 @@ static void switch_to_next_emotion(void) {
     break;
   }
   timer_ms = 0; // Reset timer just in case
+  last_api_emotion =
+      (robot_emotion_t)-1; // Reset API guard so external calls can re-trigger
 }
 
 static void scr_event_cb(lv_event_t *e) {
@@ -1706,15 +1730,13 @@ static void scr_event_cb(lv_event_t *e) {
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_get_act());
     if (dir == LV_DIR_TOP)
       ui_settings_show();
-  } else if (code == LV_EVENT_CLICKED) {
-    // Switch emotion on tap
-    switch_to_next_emotion();
   }
 }
 
 static void main_loop(lv_timer_t *timer) {
   update_positions();
-  timer_ms += 16; // 60 FPS update
+  anim_manager_update(); // MUST call this to advance vector animations
+  timer_ms += 16;        // 60 FPS update
 
   // Saccade Update (Random micro-movements)
   // Only create saccades in IDLE or HAPPY to mimic looking around
@@ -1827,6 +1849,32 @@ static void main_loop(lv_timer_t *timer) {
     idle_anim_type = IDLE_ACT_NONE; // Reset if switched away
   }
 
+  // ANGRY Phase 0 Procedural Update
+  if (current_emotion == EMO_ANGRY && angry_phase == 0) {
+    int16_t zoom_val = 256;
+    int16_t shake_y = 0;
+    update_angry_physics(timer_ms, &shake_y, &zoom_val);
+
+    if (left_eye)
+      lv_img_set_zoom(left_eye, zoom_val);
+    if (right_eye)
+      lv_img_set_zoom(right_eye, zoom_val);
+
+    // Show blue components during the initial seething phase
+    if (left_angry_blue_eye) {
+      lv_obj_clear_flag(left_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+      lv_img_set_zoom(left_angry_blue_eye, zoom_val);
+    }
+    if (right_angry_blue_eye) {
+      lv_obj_clear_flag(right_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+      lv_img_set_zoom(right_angry_blue_eye, zoom_val);
+    }
+    if (angry_blue_mouth) {
+      lv_obj_clear_flag(angry_blue_mouth, LV_OBJ_FLAG_HIDDEN);
+      lv_img_set_zoom(angry_blue_mouth, zoom_val);
+    }
+  }
+
   // Random Blink
   blink_timer += 50;
   if (current_emotion != EMO_LAUGH && current_emotion != EMO_LOVE &&
@@ -1866,9 +1914,19 @@ static void main_loop(lv_timer_t *timer) {
     duration_ms = 5000;
     break;
   case EMO_ANGRY:
-    duration_ms = 500; // Almost immediate transition to animation
-    if (angry_phase == 1) {
-      duration_ms = 5000; // Wait for animation
+    // Angry 4-Phase Logic
+    // Phase 0: Blue Seething procedural -> 400ms
+    // Phase 1: Focus Gap (Still/Wait) -> 300ms
+    // Phase 2: Angry Animation (Vector Burst) -> Plays Once
+    // Phase 3: Dizzy Animation (Vector Loop) -> 2 Seconds
+    if (angry_phase == 0) {
+      duration_ms = 400;
+    } else if (angry_phase == 1) {
+      duration_ms = 300; // Spacing/Gap
+    } else if (angry_phase == 2) {
+      duration_ms = 10000; // Timeout for vector burst
+    } else {               // angry_phase == 3
+      duration_ms = 2000;  // Final seething loop
     }
     break;
   case EMO_CUSTOM:
@@ -1876,15 +1934,50 @@ static void main_loop(lv_timer_t *timer) {
     break;
   }
 
-  if (timer_ms >= duration_ms) {
-    // Angry 2-Phase Logic
-    if (current_emotion == EMO_ANGRY && angry_phase == 0) {
-      angry_phase = 1;
-      // Trigger Vector Animation (Phase 2)
-      // This will cause update_positions to switch to EMO_CUSTOM temporarily
-      anim_manager_play("angry_anim", 1);
+  // Dynamic check for Phase 2 (Vector Burst) -> Phase 3 (Dizzy Loop)
+  if (current_emotion == EMO_ANGRY && angry_phase == 2) {
+    if (!anim_manager_is_playing()) {
+      angry_phase = 3;
+      printf("[UI] Angry Phase 2 -> 3: Burst done, starting Dizzy loop\n");
+      anim_manager_play("dizzy_anim", 0);
       timer_ms = 0;
-      return; // Stay in loop, let anim take over
+      return;
+    }
+  }
+
+  if (timer_ms >= duration_ms) {
+    if (current_emotion == EMO_ANGRY) {
+      if (angry_phase == 0) {
+        // Phase 0 (Blue) -> Phase 1 (Gap)
+        angry_phase = 1;
+        printf("[UI] Angry Phase 0 -> 1: Hiding blue, focusing...\n");
+        if (left_angry_blue_eye)
+          lv_obj_add_flag(left_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+        if (right_angry_blue_eye)
+          lv_obj_add_flag(right_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+        if (angry_blue_mouth)
+          lv_obj_add_flag(angry_blue_mouth, LV_OBJ_FLAG_HIDDEN);
+        timer_ms = 0;
+        return;
+      } else if (angry_phase == 1) {
+        // Phase 1 (Gap) -> Phase 2 (Burst)
+        angry_phase = 2;
+        printf("[UI] Angry Phase 1 -> 2: Triggering burst 'angry_anim'\n");
+        // Hide normal eyes during vector burst to avoid overlapping
+        if (left_eye)
+          lv_obj_add_flag(left_eye, LV_OBJ_FLAG_HIDDEN);
+        if (right_eye)
+          lv_obj_add_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+
+        bool ok = anim_manager_play("angry_anim", 1);
+        if (!ok) {
+          printf("[UI] ERR: Failed to play 'angry_anim', skipping burst\n");
+          angry_phase = 3;
+          anim_manager_play("dizzy_anim", 0);
+        }
+        timer_ms = 0;
+        return;
+      }
     }
 
     switch_to_next_emotion();
@@ -1922,7 +2015,7 @@ static lv_obj_t *create_tear_image(lv_obj_t *parent) {
     lv_draw_rect_dsc_t hl_dsc;
     lv_draw_rect_dsc_init(&hl_dsc);
     hl_dsc.bg_color = lv_color_hex(0xFFFFFF);
-    hl_dsc.bg_opa = LV_OPA_80;
+    hl_dsc.bg_opa = LV_OPA_50;
     hl_dsc.radius = 5;
     lv_canvas_draw_rect(canvas_tear_ref, 20, 36, 8, 14, &hl_dsc);
 
@@ -2171,14 +2264,15 @@ lv_obj_t *ui_robo_eyes_get_scr(void) { return scr_eyes; }
 
 // Touch event handler for the screen
 static void screen_touch_cb(lv_event_t *e) {
-  // Switch to Custom Animation when screen is clicked
-  if (current_emotion != EMO_CUSTOM) {
-    printf("Screen clicked! Switching to Custom Animation.\n");
-    ui_robo_eyes_set_emotion_type(EMOTION_CUSTOM);
-  } else {
-    // Toggle back to Normal if clicked again
-    printf("Screen clicked! Switching back to Normal.\n");
-    ui_robo_eyes_set_emotion_type(EMOTION_NORMAL);
+  lv_event_code_t code = lv_event_get_code(e);
+  if (code == LV_EVENT_CLICKED) {
+    if (current_emotion != EMO_CUSTOM) {
+      printf("[UI] Screen clicked! Force switching to Custom Animation.\n");
+      ui_robo_eyes_set_emotion_type(EMOTION_CUSTOM);
+    } else {
+      printf("[UI] Screen clicked! Returning to Normal state.\n");
+      ui_robo_eyes_set_emotion_type(EMOTION_NORMAL);
+    }
   }
 }
 
@@ -2191,8 +2285,8 @@ void ui_robo_eyes_init(void) {
   lv_obj_set_style_bg_opa(scr_eyes, LV_OPA_COVER, 0);
   lv_obj_clear_flag(scr_eyes, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(scr_eyes, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(scr_eyes, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(scr_eyes, scr_event_cb, LV_EVENT_ALL, NULL);
+  lv_obj_add_event_cb(scr_eyes, screen_touch_cb, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(scr_eyes, scr_event_cb, LV_EVENT_GESTURE, NULL);
 
   lv_style_init(&style_eye);
   lv_style_set_radius(&style_eye, LV_RADIUS_CIRCLE);
@@ -2224,24 +2318,28 @@ void ui_robo_eyes_init(void) {
   lv_obj_set_size(left_eye, EYE_WIDTH, EYE_HEIGHT);
   lv_obj_align(left_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X, 0);
   lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(left_eye, LV_OBJ_FLAG_CLICKABLE);
 
   right_eye = lv_obj_create(scr_eyes);
   lv_obj_add_style(right_eye, &style_eye, 0);
   lv_obj_set_size(right_eye, EYE_WIDTH, EYE_HEIGHT);
   lv_obj_align(right_eye, LV_ALIGN_CENTER, EYE_OFFSET_X, 0);
   lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(right_eye, LV_OBJ_FLAG_CLICKABLE);
 
   left_laugh_eye = lv_line_create(scr_eyes);
   lv_line_set_points(left_laugh_eye, left_arrow_pts, LAUGH_EYE_POINTS);
   lv_obj_add_style(left_laugh_eye, &style_line, 0);
   lv_obj_align(left_laugh_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X, 0);
   lv_obj_add_flag(left_laugh_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(left_laugh_eye, LV_OBJ_FLAG_CLICKABLE);
 
   right_laugh_eye = lv_line_create(scr_eyes);
   lv_line_set_points(right_laugh_eye, right_arrow_pts, LAUGH_EYE_POINTS);
   lv_obj_add_style(right_laugh_eye, &style_line, 0);
   lv_obj_align(right_laugh_eye, LV_ALIGN_CENTER, EYE_OFFSET_X, 0);
   lv_obj_add_flag(right_laugh_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(right_laugh_eye, LV_OBJ_FLAG_CLICKABLE);
 
   // Big Laugh Mouth (Pink & Filled) - Frame 1
   big_laugh_mouth = lv_obj_create(scr_eyes);
@@ -2256,6 +2354,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_align(big_laugh_mouth, LV_ALIGN_CENTER, 0, BIG_MOUTH_OFFSET_Y);
   lv_obj_add_flag(big_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(big_laugh_mouth, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(big_laugh_mouth, LV_OBJ_FLAG_CLICKABLE);
 
   // Create Tongue (Child of Big Mouth)
   // It will move and scale automatically with the mouth!
@@ -2316,6 +2415,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_set_style_clip_corner(grin_laugh_mouth, true, 0); // Fix aliasing
   lv_obj_align(grin_laugh_mouth, LV_ALIGN_CENTER, 0, BIG_MOUTH_OFFSET_Y);
   lv_obj_add_flag(grin_laugh_mouth, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(grin_laugh_mouth, LV_OBJ_FLAG_CLICKABLE);
 
   // Heart Eyes (LOVE emotion) - Canvas drawn heart shape
   // Create heart canvas (cached, like teardrop)
@@ -2370,12 +2470,14 @@ void ui_robo_eyes_init(void) {
   lv_img_set_src(left_heart_eye, lv_canvas_get_img(canvas_heart_ref));
   lv_obj_align(left_heart_eye, LV_ALIGN_CENTER, -HEART_EYE_OFFSET_X, 0);
   lv_obj_add_flag(left_heart_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(left_heart_eye, LV_OBJ_FLAG_CLICKABLE);
 
   // Create right heart eye from canvas
   right_heart_eye = lv_img_create(scr_eyes);
   lv_img_set_src(right_heart_eye, lv_canvas_get_img(canvas_heart_ref));
   lv_obj_align(right_heart_eye, LV_ALIGN_CENTER, HEART_EYE_OFFSET_X, 0);
   lv_obj_add_flag(right_heart_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(right_heart_eye, LV_OBJ_FLAG_CLICKABLE);
 
   // Removed omega mouth
 
@@ -2386,6 +2488,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_align(left_cheek, LV_ALIGN_CENTER, -EYE_OFFSET_X,
                CHEEK_OFFSET_Y_HIDDEN);
   lv_obj_clear_flag(left_cheek, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(left_cheek, LV_OBJ_FLAG_CLICKABLE);
 
   right_cheek = lv_obj_create(scr_eyes);
   lv_obj_add_style(right_cheek, &style_mask, 0);
@@ -2393,6 +2496,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_align(right_cheek, LV_ALIGN_CENTER, EYE_OFFSET_X,
                CHEEK_OFFSET_Y_HIDDEN);
   lv_obj_clear_flag(right_cheek, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(right_cheek, LV_OBJ_FLAG_CLICKABLE);
 
   // Create Happy Mouth "~" AFTER cheeks
   happy_mouth = lv_line_create(scr_eyes);
@@ -2403,6 +2507,7 @@ void ui_robo_eyes_init(void) {
   lv_style_set_line_rounded(&style_happy_line, true);
   lv_obj_add_style(happy_mouth, &style_happy_line, 0);
   lv_obj_add_flag(happy_mouth, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(happy_mouth, LV_OBJ_FLAG_CLICKABLE);
 
   // Big Open Happy Mouth (New: Exact D-Shape Container)
   happy_open_mouth = lv_obj_create(scr_eyes);
@@ -2422,6 +2527,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_set_style_border_width(shape, 0, 0);
   lv_obj_align(shape, LV_ALIGN_TOP_MID, 0, -75); // Move center to container top
   lv_obj_clear_flag(shape, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(shape, LV_OBJ_FLAG_CLICKABLE);
 
   left_sad_mask = lv_obj_create(scr_eyes);
   lv_obj_add_style(left_sad_mask, &style_mask, 0);
@@ -2429,6 +2535,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_align(left_sad_mask, LV_ALIGN_CENTER,
                -EYE_OFFSET_X - SAD_MASK_OFFSET_X, SAD_MASK_OFFSET_Y_HIDDEN);
   lv_obj_clear_flag(left_sad_mask, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(left_sad_mask, LV_OBJ_FLAG_CLICKABLE);
 
   right_sad_mask = lv_obj_create(scr_eyes);
   lv_obj_add_style(right_sad_mask, &style_mask, 0);
@@ -2436,6 +2543,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_align(right_sad_mask, LV_ALIGN_CENTER,
                EYE_OFFSET_X + SAD_MASK_OFFSET_X, SAD_MASK_OFFSET_Y_HIDDEN);
   lv_obj_clear_flag(right_sad_mask, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(right_sad_mask, LV_OBJ_FLAG_CLICKABLE);
 
   left_tear = create_tear_image(scr_eyes);
   // lv_obj_add_style(left_tear, &style_tear_part, 0); // Removed to fix square
@@ -2443,6 +2551,7 @@ void ui_robo_eyes_init(void) {
   lv_obj_align(left_tear, LV_ALIGN_CENTER, -EYE_OFFSET_X, TEAR_START_Y);
   lv_obj_clear_flag(left_tear, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(left_tear, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(left_tear, LV_OBJ_FLAG_CLICKABLE);
 
   right_tear = create_tear_image(scr_eyes);
   // lv_obj_add_style(right_tear, &style_tear_part, 0); // Removed to fix square
@@ -2450,15 +2559,18 @@ void ui_robo_eyes_init(void) {
   lv_obj_align(right_tear, LV_ALIGN_CENTER, EYE_OFFSET_X, TEAR_START_Y);
   lv_obj_clear_flag(right_tear, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(right_tear, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(right_tear, LV_OBJ_FLAG_CLICKABLE);
 
   // --- Sleep Elements ---
   left_sleep_eye = lv_line_create(scr_eyes);
   lv_obj_add_style(left_sleep_eye, &style_line, 0);
   lv_obj_add_flag(left_sleep_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(left_sleep_eye, LV_OBJ_FLAG_CLICKABLE);
 
   right_sleep_eye = lv_line_create(scr_eyes);
   lv_obj_add_style(right_sleep_eye, &style_line, 0);
   lv_obj_add_flag(right_sleep_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(right_sleep_eye, LV_OBJ_FLAG_CLICKABLE);
 
   // Sleep Mouth (Oval yawn shape)
   sleep_mouth = lv_obj_create(scr_eyes);
@@ -2499,10 +2611,12 @@ void ui_robo_eyes_init(void) {
   left_angry_eye = create_left_angry_eye_image(scr_eyes);
   lv_obj_align(left_angry_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X, 0);
   lv_obj_add_flag(left_angry_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(left_angry_eye, LV_OBJ_FLAG_CLICKABLE);
 
   right_angry_eye = create_right_angry_eye_image(scr_eyes);
   lv_obj_align(right_angry_eye, LV_ALIGN_CENTER, EYE_OFFSET_X, 0);
   lv_obj_add_flag(right_angry_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(right_angry_eye, LV_OBJ_FLAG_CLICKABLE);
 
   // --- Blue Angry Elements (Frame 2) ---
   // Re-use helper logic with Color Param?
@@ -2511,10 +2625,12 @@ void ui_robo_eyes_init(void) {
   left_angry_blue_eye = create_left_angry_blue_eye_image(scr_eyes);
   lv_obj_align(left_angry_blue_eye, LV_ALIGN_CENTER, -EYE_OFFSET_X, 0);
   lv_obj_add_flag(left_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(left_angry_blue_eye, LV_OBJ_FLAG_CLICKABLE);
 
   right_angry_blue_eye = create_right_angry_blue_eye_image(scr_eyes);
   lv_obj_align(right_angry_blue_eye, LV_ALIGN_CENTER, EYE_OFFSET_X, 0);
   lv_obj_add_flag(right_angry_blue_eye, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(right_angry_blue_eye, LV_OBJ_FLAG_CLICKABLE);
 
   // Blue Mouth (Peanut/Rounded Rect)
   angry_blue_mouth = lv_obj_create(scr_eyes);
@@ -2526,6 +2642,8 @@ void ui_robo_eyes_init(void) {
   lv_obj_set_style_border_width(angry_blue_mouth, 0, 0);
   lv_obj_align(angry_blue_mouth, LV_ALIGN_CENTER, 0, 80);
   lv_obj_add_flag(angry_blue_mouth, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(angry_blue_mouth,
+                    LV_OBJ_FLAG_CLICKABLE); // Fix blocking tap
 
   // Lids removed - baked into eye images
 
@@ -2563,19 +2681,15 @@ void ui_robo_eyes_init(void) {
 
   srand(12345);
 
-  // Register Angry Animation
-  anim_manager_register_vector(&angry_anim_data);
-
   main_timer = lv_timer_create(main_loop, 16, NULL); // 16ms = ~60 FPS
 
   // Add touch event to the whole screen to switch modes
-  lv_obj_add_event_cb(scr_eyes, screen_touch_cb, LV_EVENT_CLICKED, NULL);
+  // No-op - removed double registration
 }
 
 // --- API ---
 void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
   // Guard: Protect against redundant calls which cause animation flickering
-  static robot_emotion_t last_api_emotion = (robot_emotion_t)-1;
   if (emotion == last_api_emotion)
     return;
   last_api_emotion = emotion;
@@ -2606,7 +2720,7 @@ void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
     hide_angry();
 
     // Start Custom Anim via Manager
-    anim_manager_play("my_anim", 0); // 0 = Infinite loop
+    anim_manager_play("wink", 0); // Use "wink" as the demo custom animation
 
     current_emotion = EMO_CUSTOM;
     timer_ms = 0; // Reset timer
@@ -2678,6 +2792,7 @@ void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
   case EMOTION_ANGRY:
     show_angry();
     current_emotion = EMO_ANGRY;
+    angry_phase = 0; // Reset to Phase 0 (procedural)
     break;
   // Map others to normal for now if not implemented
   default:
@@ -2712,4 +2827,25 @@ void ui_robo_eyes_look_at(int16_t x, int16_t y) {
   }
 }
 void ui_robo_eyes_blink(void) { do_blink(); }
-robot_emotion_t ui_robo_eyes_get_emotion(void) { return EMOTION_NORMAL; }
+robot_emotion_t ui_robo_eyes_get_emotion(void) {
+  switch (current_emotion) {
+  case EMO_IDLE:
+    return EMOTION_NORMAL;
+  case EMO_HAPPY:
+    return EMOTION_HAPPY;
+  case EMO_SAD:
+    return EMOTION_SAD;
+  case EMO_LAUGH:
+    return EMOTION_LAUGH;
+  case EMO_LOVE:
+    return EMOTION_LOVE;
+  case EMO_SLEEP:
+    return EMOTION_SLEEP;
+  case EMO_ANGRY:
+    return EMOTION_ANGRY;
+  case EMO_CUSTOM:
+    return EMOTION_CUSTOM;
+  default:
+    return EMOTION_NORMAL;
+  }
+}
