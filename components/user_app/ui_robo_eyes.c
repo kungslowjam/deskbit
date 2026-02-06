@@ -16,6 +16,7 @@ extern void register_all_animations(void);
 
 LV_FONT_DECLARE(lv_font_montserratMedium_20);
 LV_FONT_DECLARE(lv_font_montserratMedium_23);
+LV_FONT_DECLARE(lv_font_montserrat_48); // Largest Standard Font
 
 // Screen constants
 #define SCREEN_WIDTH 466
@@ -146,6 +147,7 @@ extern const uint8_t my_anim_f0_shape_count;
 extern const uint8_t my_anim_f1_shape_count;
 extern const uint8_t my_anim_f2_shape_count;
 extern const uint32_t my_anim_total_duration;
+extern const anim_vector_t angry_anim_data; // New Angry Animation Data
 
 // State
 typedef enum {
@@ -167,6 +169,7 @@ static int breath_phase = 0;
 static int laugh_shake_phase = 0;
 static int laugh_cycle = 0;
 static int laugh_intensity = 0; // 0-100, builds up during laugh
+static int angry_phase = 0;     // 0: Pulse, 1: Animation
 
 // Styles
 static lv_style_t style_eye;
@@ -244,6 +247,7 @@ typedef enum {
   IDLE_ACT_TILT,
   IDLE_ACT_CURIOUS
 } idle_action_t;
+static lv_style_t style_z;
 static idle_action_t idle_anim_type = IDLE_ACT_NONE;
 static int idle_anim_timer = 0;
 static int next_idle_anim_time = 2000;
@@ -1498,59 +1502,57 @@ static void hide_love(void) {
 // -----------------------------------------------------------------------------
 // SLEEP Emotion - 'zzz' Animation
 // -----------------------------------------------------------------------------
+// Helper to create Z image for Sleep mode (so we can Rotate/Zoom it)
+// Zzz Animation Callback (For Labels - REVERTED TO ROBUST LABELS)
 static void anim_z_cb(void *var, int32_t v) {
   lv_obj_t *z = (lv_obj_t *)var;
   if (!z)
     return;
 
-  // v: 0 to 100 (percentage of path)
+  // v: 0 to 100
   float p = v / 100.0f;
 
-  // Fly up and right with a gentle curve
-  // Increased starting offset and travel distance
-  int16_t start_y = -30;
-  int16_t end_y = -180; // Go higher
-  int16_t start_x = 0;
-  int16_t end_x = 80;
+  // Fly up from CENTER
+  int16_t start_y = 0;
+  int16_t end_y = -200; // Fly up high
+  int16_t start_x = 0;  // Dead center horizontally
+
+  // Drift slightly right
+  int16_t end_x = 40;
+
+  int16_t sway = (int16_t)(30.0f * sinf(p * 8.0f));
 
   int16_t curr_y = start_y + (int16_t)((end_y - start_y) * p);
-  int16_t curr_x = start_x + (int16_t)((end_x - start_x) * p) +
-                   (int16_t)(20.0f * sinf(p * 6.28f));
+  int16_t curr_x = start_x + (int16_t)((end_x - start_x) * p) + sway;
 
   lv_obj_align(z, LV_ALIGN_CENTER, curr_x, curr_y);
 
-  // Smooth Fade In AND Out
-  // 0.0 - 0.3: Fade In
-  // 0.3 - 0.6: Hold
-  // 0.6 - 1.0: Fade Out
-  if (p < 0.3f) {
-    lv_obj_set_style_text_opa(z, (uint8_t)(255 * (p / 0.3f)), 0);
-  } else if (p > 0.6f) {
-    lv_obj_set_style_text_opa(z, (uint8_t)(255 * (1.0f - (p - 0.6f) / 0.4f)),
+  // Fade In/Out
+  // Zoom and Rotation removed as they often fail on Labels without specific
+  // config
+  if (p < 0.2f) {
+    lv_obj_set_style_text_opa(z, (uint8_t)(255 * (p / 0.2f)), 0);
+  } else if (p > 0.7f) {
+    lv_obj_set_style_text_opa(z, (uint8_t)(255 * (1.0f - (p - 0.7f) / 0.3f)),
                               0);
   } else {
     lv_obj_set_style_text_opa(z, 255, 0);
   }
-
-  // Scale up significantly (Big Zzz!)
-  // Start: 2.0x (512) -> End: 4.5x (1152)
-  float scale_start = 2.0f;
-  float scale_end = 4.5f;
-  float current_scale = scale_start + (scale_end - scale_start) * p;
-
-  lv_obj_set_style_transform_zoom(z, (uint16_t)(256 * current_scale), 0);
 }
 
 static void start_z_anim(lv_obj_t *z, uint32_t delay) {
   if (!z)
     return;
+
+  // FORCE TO FRONT: Ensure it's not hidden behind eyes/bg
+  lv_obj_move_foreground(z);
   lv_obj_clear_flag(z, LV_OBJ_FLAG_HIDDEN);
 
   lv_anim_t a;
   lv_anim_init(&a);
   lv_anim_set_var(&a, z);
   lv_anim_set_values(&a, 0, 100);
-  lv_anim_set_time(&a, 2500);
+  lv_anim_set_time(&a, 1500); // Faster float up
   lv_anim_set_delay(&a, delay);
   lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
   lv_anim_set_exec_cb(&a, anim_z_cb);
@@ -1589,14 +1591,8 @@ static void show_sleep(void) {
   if (sleep_mouth)
     lv_obj_clear_flag(sleep_mouth, LV_OBJ_FLAG_HIDDEN);
 
-  // Make sure ZZZ are on top
-  if (sleep_z1)
-    lv_obj_move_foreground(sleep_z1);
-  if (sleep_z2)
-    lv_obj_move_foreground(sleep_z2);
-  if (sleep_z3)
-    lv_obj_move_foreground(sleep_z3);
-
+  // We move foreground inside start_z_anim now for safety,
+  // but keeping explicit calls here doesn't hurt.
   start_z_anim(sleep_z1, 0);
   start_z_anim(sleep_z2, 800);
   start_z_anim(sleep_z3, 1600);
@@ -1852,10 +1848,10 @@ static void main_loop(lv_timer_t *timer) {
   int duration_ms = 2000; // Default
   switch (current_emotion) {
   case EMO_IDLE:
-    duration_ms = 8000; // Increased from 1500 to 8 seconds
+    duration_ms = 8000;
     break;
   case EMO_HAPPY:
-    duration_ms = 1500; // Super fast
+    duration_ms = 1500;
     break;
   case EMO_SAD:
     duration_ms = 2000;
@@ -1867,18 +1863,30 @@ static void main_loop(lv_timer_t *timer) {
     duration_ms = 2000;
     break;
   case EMO_SLEEP:
-    duration_ms = 2500;
+    duration_ms = 5000;
     break;
   case EMO_ANGRY:
-    duration_ms = 2000;
+    duration_ms = 500; // Almost immediate transition to animation
+    if (angry_phase == 1) {
+      duration_ms = 5000; // Wait for animation
+    }
     break;
-  case EMO_CUSTOM:         // Custom animation might have its own duration or be
-                           // infinite
-    duration_ms = 9999999; // Effectively infinite, until manually changed
+  case EMO_CUSTOM:
+    duration_ms = 9999999;
     break;
   }
 
   if (timer_ms >= duration_ms) {
+    // Angry 2-Phase Logic
+    if (current_emotion == EMO_ANGRY && angry_phase == 0) {
+      angry_phase = 1;
+      // Trigger Vector Animation (Phase 2)
+      // This will cause update_positions to switch to EMO_CUSTOM temporarily
+      anim_manager_play("angry_anim", 1);
+      timer_ms = 0;
+      return; // Stay in loop, let anim take over
+    }
+
     switch_to_next_emotion();
   }
 }
@@ -2463,26 +2471,28 @@ void ui_robo_eyes_init(void) {
   lv_obj_add_flag(sleep_mouth, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(sleep_mouth, LV_OBJ_FLAG_SCROLLABLE);
 
-  // ZZZ Labels
-  static lv_style_t style_z; // MUST BE STATIC
+  // Style Z (Restored for Labels)
   lv_style_init(&style_z);
   lv_style_set_text_color(&style_z, EYE_COLOR);
-  lv_style_set_text_font(
-      &style_z, &lv_font_montserratMedium_23); // Standard LVGL font (larger)
+  lv_style_set_text_font(&style_z, &lv_font_montserrat_48); // BIG FONT
 
+  // ZZZ Labs (Reverted to Labels for visibility guarantee)
   sleep_z1 = lv_label_create(scr_eyes);
   lv_label_set_text(sleep_z1, "Z");
   lv_obj_add_style(sleep_z1, &style_z, 0);
+  lv_obj_align(sleep_z1, LV_ALIGN_CENTER, 0, 0); // Start at center
   lv_obj_add_flag(sleep_z1, LV_OBJ_FLAG_HIDDEN);
 
   sleep_z2 = lv_label_create(scr_eyes);
   lv_label_set_text(sleep_z2, "z");
   lv_obj_add_style(sleep_z2, &style_z, 0);
+  lv_obj_align(sleep_z2, LV_ALIGN_CENTER, 0, 0);
   lv_obj_add_flag(sleep_z2, LV_OBJ_FLAG_HIDDEN);
 
   sleep_z3 = lv_label_create(scr_eyes);
   lv_label_set_text(sleep_z3, "z");
   lv_obj_add_style(sleep_z3, &style_z, 0);
+  lv_obj_align(sleep_z3, LV_ALIGN_CENTER, 0, 0);
   lv_obj_add_flag(sleep_z3, LV_OBJ_FLAG_HIDDEN);
 
   // --- Angry Elements ---
@@ -2552,6 +2562,10 @@ void ui_robo_eyes_init(void) {
   */
 
   srand(12345);
+
+  // Register Angry Animation
+  anim_manager_register_vector(&angry_anim_data);
+
   main_timer = lv_timer_create(main_loop, 16, NULL); // 16ms = ~60 FPS
 
   // Add touch event to the whole screen to switch modes
@@ -2565,6 +2579,11 @@ void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
   if (emotion == last_api_emotion)
     return;
   last_api_emotion = emotion;
+
+  // Reset Angry Phase
+  if (emotion == EMOTION_ANGRY) {
+    angry_phase = 0;
+  }
 
   // 6. Ensure other emotions stop the custom animation
   if (emotion != EMOTION_CUSTOM) {
