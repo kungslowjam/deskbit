@@ -171,8 +171,10 @@ static int breath_phase = 0;
 // static int16_t gaze_y = 0;
 static int laugh_shake_phase = 0;
 static int laugh_cycle = 0;
-static int laugh_intensity = 0; // 0-100, builds up during laugh
-static int angry_phase = 0;     // 0: Pulse, 1: Animation
+static int laugh_intensity = 0;           // 0-100, builds up during laugh
+static int angry_phase = 0;               // 0: Pulse, 1: Animation
+static uint32_t boredom_timer_ms = 0;     // Timer to go to sleep
+#define BOREDOM_SLEEP_TIMEOUT (30 * 1000) // 30 seconds to sleep
 
 // Styles
 static lv_style_t style_eye;
@@ -1724,6 +1726,20 @@ static void main_loop(lv_timer_t *timer) {
   anim_manager_update(); // MUST call this to advance vector animations
   timer_ms += 16;        // 60 FPS update
 
+  // Boredom Timer: Go to sleep if idle for too long
+  if (current_emotion == EMO_IDLE) {
+    boredom_timer_ms += 16;
+    if (boredom_timer_ms >= BOREDOM_SLEEP_TIMEOUT) {
+      printf("[UI] Boredom timeout reached. Going to sleep...\n");
+      ui_robo_eyes_set_emotion_type(EMOTION_SLEEP);
+      boredom_timer_ms = 0;
+    }
+  } else {
+    // We only reset boredom here if we are NOT in idle.
+    // This handles cases where an emotion finished and returned to idle.
+    // The reset on physical interaction is handled by the API.
+  }
+
   // Saccade Update (Random micro-movements)
   // Only create saccades in IDLE or HAPPY to mimic looking around
   if (current_emotion == EMO_IDLE || current_emotion == EMO_HAPPY) {
@@ -2683,6 +2699,8 @@ void ui_robo_eyes_init(void) {
 
 // --- API ---
 void ui_robo_eyes_set_emotion_type(robot_emotion_t emotion) {
+  ui_robo_eyes_reset_boredom(); // Reset sleep timer on any interaction
+
   // Guard: Protect against redundant calls which cause animation flickering
   if (emotion == last_api_emotion)
     return;
@@ -2849,3 +2867,5 @@ void ui_robo_eyes_set_debug_text(const char *text) {
     lv_label_set_text(debug_label, text);
   }
 }
+
+void ui_robo_eyes_reset_boredom(void) { boredom_timer_ms = 0; }

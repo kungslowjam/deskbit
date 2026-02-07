@@ -78,6 +78,7 @@ lv_obj_t *ui_robo_eyes_get_scr(void);
  * @brief Show debug text on screen
  */
 void ui_robo_eyes_set_debug_text(const char *text);
+void ui_robo_eyes_reset_boredom(void);
 
 /**
  * @brief Thread safety helpers (implemented in app_main.c)
