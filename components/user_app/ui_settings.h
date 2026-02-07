@@ -77,6 +77,38 @@ void ui_settings_wifi_set_connect_cb(void (*cb)(const char *ssid,
  */
 void ui_settings_create_wifi_indicator_on(lv_obj_t *parent);
 
+/**
+ * @brief Update Bluetooth status display
+ * @param connected True if connected
+ * @param device_name Name of connected device (can be NULL)
+ */
+void ui_settings_bt_update_status(bool connected, const char *device_name);
+
+/**
+ * @brief Add a Bluetooth device to the available list
+ * @param name Device name
+ * @param addr Device address or ID
+ * @param rssi Signal strength
+ */
+void ui_settings_bt_add_device(const char *name, const char *addr, int rssi);
+
+/**
+ * @brief Clear the Bluetooth device list
+ */
+void ui_settings_bt_clear_devices(void);
+
+/**
+ * @brief Set callback for Bluetooth scan trigger
+ */
+void ui_settings_bt_set_scan_cb(void (*cb)(void));
+
+/**
+ * @brief Set callback when user selects a Bluetooth device
+ * @param cb Callback function that receives the device name and address
+ */
+void ui_settings_bt_set_connect_cb(void (*cb)(const char *name,
+                                              const char *addr));
+
 #ifdef __cplusplus
 }
 #endif

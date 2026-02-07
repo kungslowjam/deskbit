@@ -23,6 +23,7 @@ static lv_obj_t *cont_launcher = NULL;
 static lv_obj_t *cont_settings_menu = NULL;
 static lv_obj_t *cont_brightness = NULL;
 static lv_obj_t *cont_wifi = NULL;
+static lv_obj_t *cont_bluetooth = NULL;
 
 // Brightness controls
 static lv_obj_t *slider_brightness = NULL;
@@ -41,6 +42,14 @@ static lv_obj_t *wifi_lbl_status = NULL;
 static lv_obj_t *wifi_lbl_ip = NULL;
 static lv_obj_t *wifi_net_list = NULL;
 static lv_obj_t *wifi_sw = NULL;
+
+// Bluetooth UI elements
+static lv_obj_t *bt_lbl_device = NULL;
+static lv_obj_t *bt_lbl_status = NULL;
+static lv_obj_t *bt_device_list = NULL;
+static lv_obj_t *bt_sw = NULL;
+static void (*bt_scan_cb)(void) = NULL;
+static void (*bt_connect_cb)(const char *name, const char *addr) = NULL;
 
 // WiFi Password Dialog
 static lv_obj_t *wifi_pwd_dialog = NULL;
@@ -69,6 +78,8 @@ static void show_brightness_panel(void);
 static void show_launcher_panel(void);
 static void show_settings_menu(void);
 static void show_wifi_panel(void);
+static void show_bluetooth_panel(void);
+static void create_bluetooth_view(void);
 static void update_pomodoro_ui(void);
 
 // -----------------------------------------------------------------------------
@@ -112,9 +123,11 @@ static lv_obj_t *anim_img_pomo = NULL; // Promoted to static for animation
 #define KEY_SESSION_LEN "session_len"
 #define KEY_BREAK_LEN "break_len"
 #define KEY_WIFI_ENABLED "wifi_en"
+#define KEY_BT_ENABLED "bt_en"
 
 static uint8_t saved_brightness = 89;   // Default 35%
 static bool saved_wifi_enabled = false; // Default WiFi OFF
+static bool saved_bt_enabled = false;   // Default Bluetooth OFF
 
 static void save_settings_to_nvs(void) {
   nvs_handle_t nvs_handle;
@@ -136,19 +149,20 @@ static void save_settings_to_nvs(void) {
   if (err != ESP_OK)
     printf("[SETTINGS] Save break err: %d\n", err);
 
-  err = nvs_set_u8(nvs_handle, KEY_WIFI_ENABLED, saved_wifi_enabled ? 1 : 0);
+  err = nvs_set_u8(nvs_handle, KEY_BT_ENABLED, saved_bt_enabled ? 1 : 0);
   if (err != ESP_OK)
-    printf("[SETTINGS] Save WiFi state err: %d\n", err);
+    printf("[SETTINGS] Save Bluetooth state err: %d\n", err);
 
   err = nvs_commit(nvs_handle);
   if (err != ESP_OK)
     printf("[SETTINGS] *** COMMIT FAILED: %d ***\n", err);
   nvs_close(nvs_handle);
 
-  printf("[SETTINGS] Saved: Brightness=%d, Session=%d, Break=%d, WiFi=%s "
-         "(commit=%s)\n",
+  printf("[SETTINGS] Saved: Brightness=%d, Session=%d, Break=%d, WiFi=%s, "
+         "Bluetooth=%s (commit=%s)\n",
          saved_brightness, (int)session_length_mins, (int)break_length_mins,
-         saved_wifi_enabled ? "ON" : "OFF", err == 0 ? "OK" : "FAIL");
+         saved_wifi_enabled ? "ON" : "OFF", saved_bt_enabled ? "ON" : "OFF",
+         err == 0 ? "OK" : "FAIL");
 }
 
 static void load_settings_from_nvs(void) {
@@ -163,6 +177,7 @@ static void load_settings_from_nvs(void) {
   int32_t session = 25;
   int32_t break_time = 5;
   uint8_t wifi_en = 0;
+  uint8_t bt_en = 0;
 
   if (nvs_get_u8(nvs_handle, KEY_BRIGHTNESS, &brightness) == ESP_OK) {
     saved_brightness = brightness;
@@ -177,12 +192,16 @@ static void load_settings_from_nvs(void) {
   if (nvs_get_u8(nvs_handle, KEY_WIFI_ENABLED, &wifi_en) == ESP_OK) {
     saved_wifi_enabled = (wifi_en != 0);
   }
+  if (nvs_get_u8(nvs_handle, KEY_BT_ENABLED, &bt_en) == ESP_OK) {
+    saved_bt_enabled = (bt_en != 0);
+  }
 
   nvs_close(nvs_handle);
 
-  printf("[SETTINGS] Loaded: Brightness=%d, Session=%d, Break=%d, WiFi=%s\n",
+  printf("[SETTINGS] Loaded: Brightness=%d, Session=%d, Break=%d, WiFi=%s, "
+         "Bluetooth=%s\n",
          saved_brightness, (int)session_length_mins, (int)break_length_mins,
-         saved_wifi_enabled ? "ON" : "OFF");
+         saved_wifi_enabled ? "ON" : "OFF", saved_bt_enabled ? "ON" : "OFF");
 }
 
 // Apply loaded settings to UI controls (call after UI is created)
@@ -220,6 +239,15 @@ static void apply_loaded_settings_to_ui(void) {
       lv_obj_add_state(wifi_sw, LV_STATE_CHECKED);
     } else {
       lv_obj_clear_state(wifi_sw, LV_STATE_CHECKED);
+    }
+  }
+
+  // Apply Bluetooth enabled state to switch
+  if (bt_sw) {
+    if (saved_bt_enabled) {
+      lv_obj_add_state(bt_sw, LV_STATE_CHECKED);
+    } else {
+      lv_obj_clear_state(bt_sw, LV_STATE_CHECKED);
     }
   }
 
@@ -1209,6 +1237,19 @@ static void show_brightness_panel(void) {
   }
 }
 
+static void show_bluetooth_panel(void) {
+  if (cont_launcher)
+    lv_obj_add_flag(cont_launcher, LV_OBJ_FLAG_HIDDEN);
+  if (cont_settings_menu)
+    lv_obj_add_flag(cont_settings_menu, LV_OBJ_FLAG_HIDDEN);
+  if (cont_brightness)
+    lv_obj_add_flag(cont_brightness, LV_OBJ_FLAG_HIDDEN);
+  if (cont_wifi)
+    lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
+  if (cont_bluetooth)
+    lv_obj_clear_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void show_wifi_panel(void) {
   if (cont_launcher)
     lv_obj_add_flag(cont_launcher, LV_OBJ_FLAG_HIDDEN);
@@ -1216,6 +1257,8 @@ static void show_wifi_panel(void) {
     lv_obj_add_flag(cont_settings_menu, LV_OBJ_FLAG_HIDDEN);
   if (cont_brightness)
     lv_obj_add_flag(cont_brightness, LV_OBJ_FLAG_HIDDEN);
+  if (cont_bluetooth)
+    lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
   if (cont_wifi)
     lv_obj_clear_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1227,6 +1270,8 @@ static void show_settings_menu(void) {
     lv_obj_add_flag(cont_brightness, LV_OBJ_FLAG_HIDDEN);
   if (cont_wifi)
     lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
+  if (cont_bluetooth)
+    lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
   if (cont_settings_menu)
     lv_obj_clear_flag(cont_settings_menu, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1240,6 +1285,8 @@ static void show_launcher_panel(void) {
     lv_obj_add_flag(cont_settings_menu, LV_OBJ_FLAG_HIDDEN);
   if (cont_wifi)
     lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
+  if (cont_bluetooth)
+    lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
   if (cont_launcher)
     lv_obj_clear_flag(cont_launcher, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1247,6 +1294,7 @@ static void show_launcher_panel(void) {
 // Callbacks for Settings Menu
 static void menu_brightness_cb(lv_event_t *e) { show_brightness_panel(); }
 static void menu_wifi_cb(lv_event_t *e) { show_wifi_panel(); }
+static void menu_bluetooth_cb(lv_event_t *e) { show_bluetooth_panel(); }
 static void back_to_settings_menu_cb(lv_event_t *e) { show_settings_menu(); }
 
 // WiFi Switch Toggle Callback
@@ -1289,6 +1337,43 @@ static void wifi_switch_cb(lv_event_t *e) {
     }
     if (wifi_lbl_ip)
       lv_label_set_text(wifi_lbl_ip, "IP: ---");
+  }
+}
+
+// Bluetooth Switch Toggle Callback
+static void bt_switch_cb(lv_event_t *e) {
+  lv_obj_t *sw = lv_event_get_target(e);
+  bool is_on = lv_obj_has_state(sw, LV_STATE_CHECKED);
+
+  // Save Bluetooth enabled state
+  saved_bt_enabled = is_on;
+  save_settings_to_nvs();
+
+  if (is_on) {
+    if (bt_scan_cb) {
+      if (bt_device_list) {
+        lv_obj_clean(bt_device_list);
+        lv_obj_t *lbl_scan = lv_label_create(bt_device_list);
+        lv_label_set_text(lbl_scan, "Scanning devices...");
+        lv_obj_set_style_text_font(lbl_scan, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(lbl_scan, lv_color_hex(0x1F2418), 0);
+      }
+      bt_scan_cb();
+    }
+  } else {
+    if (bt_device_list) {
+      lv_obj_clean(bt_device_list);
+      lv_obj_t *lbl_off = lv_label_create(bt_device_list);
+      lv_label_set_text(lbl_off, "Bluetooth is OFF");
+      lv_obj_set_style_text_font(lbl_off, &lv_font_montserrat_14, 0);
+      lv_obj_set_style_text_color(lbl_off, lv_color_hex(0x1F2418), 0);
+    }
+    if (bt_lbl_device)
+      lv_label_set_text(bt_lbl_device, "No Device Connected");
+    if (bt_lbl_status) {
+      lv_label_set_text(bt_lbl_status, "Disconnected");
+      lv_obj_set_style_text_color(bt_lbl_status, lv_color_hex(0xD95E52), 0);
+    }
   }
 }
 
@@ -1456,6 +1541,20 @@ static void wifi_network_item_cb(lv_event_t *e) {
   }
 }
 
+// Bluetooth Device Item Click Callback
+static void bt_device_item_cb(lv_event_t *e) {
+  const char *name = (const char *)lv_event_get_user_data(e);
+  // In a real implementation, we'd also need the address (addr)
+  // For now, let's just trigger connect with the name if available
+  if (name && bt_connect_cb) {
+    if (bt_lbl_status) {
+      lv_label_set_text(bt_lbl_status, "Connecting...");
+      lv_obj_set_style_text_color(bt_lbl_status, lv_color_hex(0xFFC107), 0);
+    }
+    bt_connect_cb(name, NULL);
+  }
+}
+
 // Helper: Get RSSI color based on signal strength
 static lv_color_t get_rssi_color(int rssi) {
   if (rssi >= -50) {
@@ -1544,6 +1643,22 @@ static void create_settings_menu(void) {
   lv_obj_center(lbl_wifi);
   lv_obj_set_style_text_font(lbl_wifi, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(lbl_wifi, col_ink, 0);
+
+  // --- Bluetooth Button ---
+  lv_obj_t *btn_bluetooth = lv_btn_create(menu_cont);
+  lv_obj_set_size(btn_bluetooth, 220, 70);
+  lv_obj_set_style_radius(btn_bluetooth, 15, 0);
+  lv_obj_set_style_bg_color(btn_bluetooth, col_card, 0);
+  lv_obj_set_style_border_width(btn_bluetooth, 3, 0);
+  lv_obj_set_style_border_color(btn_bluetooth, lv_color_hex(0x2F3624), 0);
+  lv_obj_set_style_shadow_width(btn_bluetooth, 0, 0);
+  lv_obj_add_event_cb(btn_bluetooth, menu_bluetooth_cb, LV_EVENT_CLICKED, NULL);
+
+  lv_obj_t *lbl_bt = lv_label_create(btn_bluetooth);
+  lv_label_set_text(lbl_bt, LV_SYMBOL_BLUETOOTH "  Bluetooth");
+  lv_obj_center(lbl_bt);
+  lv_obj_set_style_text_font(lbl_bt, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(lbl_bt, col_ink, 0);
 
   // --- Back Button ---
   lv_obj_t *btn_back = lv_btn_create(cont_settings_menu);
@@ -1704,6 +1819,132 @@ static void create_wifi_view(void) {
 }
 
 // -----------------------------------------------------------------------------
+// Bluetooth View (Retro Style)
+// -----------------------------------------------------------------------------
+static void create_bluetooth_view(void) {
+  if (cont_bluetooth)
+    return;
+
+  extern lv_font_t lv_font_montserratMedium_20;
+
+  // Retro Colors
+  lv_color_t col_bg = lv_color_hex(0xBCAD82);
+  lv_color_t col_lcd = lv_color_hex(0x98A585);
+  lv_color_t col_ink = lv_color_hex(0x1F2418);
+  lv_color_t col_btn = lv_color_hex(0x2C2C2C);
+  lv_color_t col_green = lv_color_hex(0x4CAF50);
+  lv_color_t col_red = lv_color_hex(0xD95E52);
+
+  cont_bluetooth = lv_obj_create(scr_settings);
+  lv_obj_set_size(cont_bluetooth, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(cont_bluetooth, col_bg, 0);
+  lv_obj_set_style_bg_opa(cont_bluetooth, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(cont_bluetooth, 0, 0);
+  lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(cont_bluetooth, LV_OBJ_FLAG_SCROLLABLE);
+
+  // --- Header Row (Title + Toggle) ---
+  lv_obj_t *header = lv_obj_create(cont_bluetooth);
+  lv_obj_set_size(header, 360, 50);
+  lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 35);
+  lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(header, 0, 0);
+  lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Back Button
+  lv_obj_t *btn_back = lv_btn_create(header);
+  lv_obj_set_size(btn_back, 40, 32);
+  lv_obj_align(btn_back, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_obj_set_style_radius(btn_back, 8, 0);
+  lv_obj_set_style_bg_color(btn_back, col_btn, 0);
+  lv_obj_add_event_cb(btn_back, back_to_settings_menu_cb, LV_EVENT_CLICKED,
+                      NULL);
+
+  lv_obj_t *lbl_back = lv_label_create(btn_back);
+  lv_label_set_text(lbl_back, LV_SYMBOL_LEFT);
+  lv_obj_center(lbl_back);
+  lv_obj_set_style_text_color(lbl_back, lv_color_white(), 0);
+
+  // Title
+  lv_obj_t *lbl_title = lv_label_create(header);
+  lv_label_set_text(lbl_title, "Bluetooth");
+  lv_obj_align(lbl_title, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_text_font(lbl_title, &lv_font_montserratMedium_20, 0);
+  lv_obj_set_style_text_color(lbl_title, col_ink, 0);
+
+  // BT Toggle Switch
+  bt_sw = lv_switch_create(header);
+  lv_obj_set_size(bt_sw, 50, 26);
+  lv_obj_align(bt_sw, LV_ALIGN_RIGHT_MID, 0, 0);
+  lv_obj_clear_state(bt_sw, LV_STATE_CHECKED);
+  lv_obj_set_style_bg_color(bt_sw, col_btn, 0);
+  lv_obj_set_style_bg_color(bt_sw, col_green,
+                            LV_PART_INDICATOR | LV_STATE_CHECKED);
+  lv_obj_add_event_cb(bt_sw, bt_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+  // --- Connection Status Card ---
+  lv_obj_t *status_card = lv_obj_create(cont_bluetooth);
+  lv_obj_set_size(status_card, 360, 85);
+  lv_obj_align(status_card, LV_ALIGN_TOP_MID, 0, 95);
+  lv_obj_set_style_radius(status_card, 12, 0);
+  lv_obj_set_style_bg_color(status_card, col_lcd, 0);
+  lv_obj_set_style_border_width(status_card, 3, 0);
+  lv_obj_set_style_border_color(status_card, lv_color_hex(0x2F3624), 0);
+  lv_obj_clear_flag(status_card, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *bt_icon = lv_label_create(status_card);
+  lv_label_set_text(bt_icon, LV_SYMBOL_BLUETOOTH);
+  lv_obj_align(bt_icon, LV_ALIGN_LEFT_MID, 12, 0);
+  lv_obj_set_style_text_font(bt_icon, &lv_font_montserrat_48, 0);
+  lv_obj_set_style_text_color(bt_icon, col_ink, 0);
+
+  lv_obj_t *status_txt = lv_obj_create(status_card);
+  lv_obj_set_size(status_txt, 250, 70);
+  lv_obj_align(status_txt, LV_ALIGN_RIGHT_MID, -8, 0);
+  lv_obj_set_style_bg_opa(status_txt, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(status_txt, 0, 0);
+  lv_obj_set_flex_flow(status_txt, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(status_txt, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(status_txt, LV_OBJ_FLAG_SCROLLABLE);
+
+  bt_lbl_device = lv_label_create(status_txt);
+  lv_label_set_text(bt_lbl_device, "No Device Connected");
+  lv_obj_set_style_text_font(bt_lbl_device, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(bt_lbl_device, col_ink, 0);
+  lv_label_set_long_mode(bt_lbl_device, LV_LABEL_LONG_SCROLL_CIRCULAR);
+  lv_obj_set_width(bt_lbl_device, 230);
+
+  bt_lbl_status = lv_label_create(status_txt);
+  lv_label_set_text(bt_lbl_status, "Disconnected");
+  lv_obj_set_style_text_font(bt_lbl_status, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(bt_lbl_status, col_red, 0);
+
+  // --- Available Devices Section ---
+  lv_obj_t *lbl_avail = lv_label_create(cont_bluetooth);
+  lv_label_set_text(lbl_avail, "Available Devices");
+  lv_obj_align(lbl_avail, LV_ALIGN_TOP_LEFT, 55, 190);
+  lv_obj_set_style_text_font(lbl_avail, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(lbl_avail, col_ink, 0);
+
+  bt_device_list = lv_obj_create(cont_bluetooth);
+  lv_obj_set_size(bt_device_list, 360, 215);
+  lv_obj_align(bt_device_list, LV_ALIGN_TOP_MID, 0, 215);
+  lv_obj_set_style_radius(bt_device_list, 12, 0);
+  lv_obj_set_style_bg_color(bt_device_list, col_lcd, 0);
+  lv_obj_set_style_border_width(bt_device_list, 3, 0);
+  lv_obj_set_style_border_color(bt_device_list, lv_color_hex(0x2F3624), 0);
+  lv_obj_set_style_pad_all(bt_device_list, 10, 0);
+  lv_obj_set_flex_flow(bt_device_list, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_gap(bt_device_list, 8, 0);
+
+  lv_obj_t *lbl_placeholder = lv_label_create(bt_device_list);
+  lv_label_set_text(lbl_placeholder, "Tap switch to scan...");
+  lv_obj_set_style_text_font(lbl_placeholder, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(lbl_placeholder, col_ink, 0);
+}
+
+// -----------------------------------------------------------------------------
 // Public Functions
 // -----------------------------------------------------------------------------
 
@@ -1743,6 +1984,7 @@ void ui_settings_init(void) {
   create_settings_menu();
   create_brightness_view();
   create_wifi_view();
+  create_bluetooth_view();
   create_pomodoro_view();
 
   // Create global WiFi indicator (always on top)
@@ -1938,4 +2180,83 @@ void ui_settings_create_wifi_indicator_on(lv_obj_t *parent) {
   lv_obj_move_foreground(external_wifi_indicator);
 
   printf("[WIFI_INDICATOR] Created external WiFi indicator on screen\n");
+}
+
+// -----------------------------------------------------------------------------
+// Bluetooth Public API Functions
+// -----------------------------------------------------------------------------
+
+void ui_settings_bt_update_status(bool connected, const char *device_name) {
+  if (bt_lbl_device) {
+    lv_label_set_text(bt_lbl_device,
+                      device_name ? device_name : "No Device Connected");
+  }
+  if (bt_lbl_status) {
+    if (connected) {
+      lv_label_set_text(bt_lbl_status, "Connected");
+      lv_obj_set_style_text_color(bt_lbl_status, lv_color_hex(0x4CAF50), 0);
+    } else {
+      lv_label_set_text(bt_lbl_status, "Disconnected");
+      lv_obj_set_style_text_color(bt_lbl_status, lv_color_hex(0xD95E52), 0);
+    }
+  }
+  if (bt_sw) {
+    if (connected) {
+      lv_obj_add_state(bt_sw, LV_STATE_CHECKED);
+    } else if (!saved_bt_enabled) {
+      lv_obj_clear_state(bt_sw, LV_STATE_CHECKED);
+    }
+  }
+}
+
+void ui_settings_bt_add_device(const char *name, const char *addr, int rssi) {
+  if (!bt_device_list || !name)
+    return;
+
+  lv_color_t col_ink = lv_color_hex(0x1F2418);
+  lv_color_t col_rssi = get_rssi_color(rssi);
+
+  lv_obj_t *dev_item = lv_obj_create(bt_device_list);
+  lv_obj_set_size(dev_item, 320, 40);
+  lv_obj_set_style_radius(dev_item, 10, 0);
+  lv_obj_set_style_bg_color(dev_item, lv_color_hex(0xA8B896), 0);
+  lv_obj_set_style_border_width(dev_item, 0, 0);
+  lv_obj_clear_flag(dev_item, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(dev_item, LV_OBJ_FLAG_CLICKABLE);
+
+  // Pressed style
+  lv_obj_set_style_bg_color(dev_item, lv_color_hex(0x8A9A7A), LV_STATE_PRESSED);
+
+  // Store name for callback
+  char *name_copy = lv_mem_alloc(strlen(name) + 1);
+  if (name_copy) {
+    strcpy(name_copy, name);
+    lv_obj_add_event_cb(dev_item, bt_device_item_cb, LV_EVENT_CLICKED,
+                        name_copy);
+  }
+
+  lv_obj_t *lbl_dev = lv_label_create(dev_item);
+  lv_label_set_text(lbl_dev, name);
+  lv_obj_align(lbl_dev, LV_ALIGN_LEFT_MID, 10, 0);
+  lv_obj_set_style_text_font(lbl_dev, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(lbl_dev, col_ink, 0);
+
+  // RSSI Icon
+  lv_obj_t *rssi_lbl = lv_label_create(dev_item);
+  lv_label_set_text(rssi_lbl, LV_SYMBOL_BLUETOOTH); // Simplified RSSI for BT
+  lv_obj_align(rssi_lbl, LV_ALIGN_RIGHT_MID, -10, 0);
+  lv_obj_set_style_text_color(rssi_lbl, col_rssi, 0);
+}
+
+void ui_settings_bt_clear_devices(void) {
+  if (!bt_device_list)
+    return;
+  lv_obj_clean(bt_device_list);
+}
+
+void ui_settings_bt_set_scan_cb(void (*cb)(void)) { bt_scan_cb = cb; }
+
+void ui_settings_bt_set_connect_cb(void (*cb)(const char *name,
+                                              const char *addr)) {
+  bt_connect_cb = cb;
 }
