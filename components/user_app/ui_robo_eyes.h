@@ -74,6 +74,17 @@ robot_emotion_t ui_robo_eyes_get_emotion(void);
  */
 lv_obj_t *ui_robo_eyes_get_scr(void);
 
+/**
+ * @brief Show debug text on screen
+ */
+void ui_robo_eyes_set_debug_text(const char *text);
+
+/**
+ * @brief Thread safety helpers (implemented in app_main.c)
+ */
+bool example_lvgl_lock(int timeout_ms);
+void example_lvgl_unlock(void);
+
 #ifdef __cplusplus
 }
 #endif

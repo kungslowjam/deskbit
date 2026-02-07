@@ -10,6 +10,7 @@
 #include "pcf85063.h"
 #include "qmi8658c.h"
 #include "sd_card_bsp.h"
+#include "sensor_logic.h"
 #include "touch_bsp.h"
 TaskHandle_t pxBleTask = NULL;
 TaskHandle_t pxWifiTask = NULL;
@@ -44,6 +45,7 @@ void user_Click_Event_Init(lv_ui *ui) {
                       LV_EVENT_ALL, ui);
 }
 void user_task_init(lv_ui *ui) {
+  sensor_logic_init(); // New interactive sensor system
   xTaskCreate(user_example, "user_example", 3000, ui, 2, NULL);
   xTaskCreate(color_user, "color_user", 3000, ui, 2, NULL);
   // Old WiFi scan task - replaced by new Settings UI system
@@ -198,7 +200,7 @@ void user_example(void *udata) {
   uint32_t rtc_test = 0;
   uint32_t qmi_test = 0;
   uint32_t adc_test = 0;
-  qmi8658_init();
+  // qmi8658_init(); // Moved to sensor_logic.c
   PCF85063_set_tim_init();
   adc_bsp_init();
   user_app_sd_read(obj);
@@ -209,15 +211,15 @@ void user_example(void *udata) {
       PCF85063_get_tim((uint8_t *)rtc_values);
       lv_label_set_text(obj->screen_label_10, rtc_values);
     }
-    if (stimes - qmi_test > 1) // 2s
-    {
-      qmi_test = stimes;
-      qmi8658_read_xyz(acc, gyro);
-      sprintf(qmi_values, "ax:%.2f ay:%.2f az:%.2f", acc[0], acc[1], acc[2]);
-      lv_label_set_text(obj->screen_label_12, qmi_values);
-      sprintf(qmi_values, "gx:%.2f gy:%.2f gz:%.2f", gyro[0], gyro[1], gyro[2]);
-      lv_label_set_text(obj->screen_label_19, qmi_values);
-    }
+    // if (stimes - qmi_test > 1) // 2s
+    // {
+    //   qmi_test = stimes;
+    //   qmi8658_read_xyz(acc, gyro);
+    //   sprintf(qmi_values, "ax:%.2f ay:%.2f az:%.2f", acc[0], acc[1], acc[2]);
+    //   lv_label_set_text(obj->screen_label_12, qmi_values);
+    //   sprintf(qmi_values, "gx:%.2f gy:%.2f gz:%.2f", gyro[0], gyro[1],
+    //   gyro[2]); lv_label_set_text(obj->screen_label_19, qmi_values);
+    // }
     if (stimes - adc_test > 1) // 2s
     {
       adc_test = stimes;

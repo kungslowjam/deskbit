@@ -18,6 +18,7 @@
 #include "lv_demos.h"
 #include "lvgl.h"
 #include "read_lcd_id_bsp.h"
+#include "sensor_logic.h"
 #include "touch_bsp.h"
 #include "ui_robo_eyes.h"
 #include "ui_settings.h"
@@ -157,7 +158,7 @@ static void example_increase_lvgl_tick(void *arg) {
   lv_tick_inc(EXAMPLE_LVGL_TICK_PERIOD_MS);
 }
 
-static bool example_lvgl_lock(int timeout_ms) {
+bool example_lvgl_lock(int timeout_ms) {
   assert(lvgl_mux && "bsp_display_start must be called first");
 
   const TickType_t timeout_ticks =
@@ -165,7 +166,7 @@ static bool example_lvgl_lock(int timeout_ms) {
   return xSemaphoreTake(lvgl_mux, timeout_ticks) == pdTRUE;
 }
 
-static void example_lvgl_unlock(void) {
+void example_lvgl_unlock(void) {
   assert(lvgl_mux && "bsp_display_start must be called first");
   xSemaphoreGive(lvgl_mux);
 }
@@ -318,6 +319,7 @@ void app_main(void) {
   // Lock the mutex due to the LVGL APIs are not thread-safe
   if (example_lvgl_lock(-1)) {
     ui_robo_eyes_init();
+    sensor_logic_init(); // Activate IMU interactions
 
     // Initialize NVS FIRST (before loading any settings)
     nvs_flash_Init();
