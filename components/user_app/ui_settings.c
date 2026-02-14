@@ -5,6 +5,7 @@
 #define LV_USE_GIF 1
 #endif
 #include "src/extra/libs/gif/lv_gif.h"
+#include "ui_liquid.h"
 #include "ui_robo_eyes.h"
 #include <stdio.h>
 
@@ -24,6 +25,7 @@ static lv_obj_t *cont_settings_menu = NULL;
 static lv_obj_t *cont_brightness = NULL;
 static lv_obj_t *cont_wifi = NULL;
 static lv_obj_t *cont_bluetooth = NULL;
+static lv_obj_t *cont_liquid_view = NULL;
 
 // Brightness controls
 static lv_obj_t *slider_brightness = NULL;
@@ -73,6 +75,7 @@ static lv_style_t style_icon_cont;
 LV_IMG_DECLARE(settings_icon);
 LV_IMG_DECLARE(deskbot_icon);
 LV_IMG_DECLARE(pomodoro_icon);
+LV_IMG_DECLARE(paint_icon);
 
 static void show_brightness_panel(void);
 static void show_launcher_panel(void);
@@ -81,6 +84,8 @@ static void show_wifi_panel(void);
 static void show_bluetooth_panel(void);
 static void create_bluetooth_view(void);
 static void update_pomodoro_ui(void);
+static void create_liquid_view(void);
+static void show_liquid_panel(void);
 
 // -----------------------------------------------------------------------------
 // Pomodoro Variables
@@ -378,6 +383,8 @@ static void show_pomodoro_panel(void) {
 }
 
 static void app_pomodoro_cb(lv_event_t *e) { show_pomodoro_panel(); }
+
+static void app_paint_cb(lv_event_t *e) { show_liquid_panel(); }
 
 // -----------------------------------------------------------------------------
 // Pomodoro Logic
@@ -1120,6 +1127,33 @@ static void create_launcher_view(void) {
   lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
   lv_obj_set_style_text_font(lbl, LV_FONT_DEFAULT, 0);
   lv_obj_set_style_pad_top(lbl, 10, 0);
+
+  // 4. Paint App
+  lv_obj_t *cont_paint = lv_obj_create(cont_launcher);
+  lv_obj_set_size(cont_paint, 180, 200);
+  lv_obj_set_style_bg_opa(cont_paint, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(cont_paint, 0, 0);
+  lv_obj_set_flex_flow(cont_paint, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(cont_paint, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(cont_paint, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *btn_paint = lv_imgbtn_create(cont_paint);
+  lv_imgbtn_set_src(btn_paint, LV_IMGBTN_STATE_RELEASED, NULL, &paint_icon,
+                    NULL);
+  lv_imgbtn_set_src(btn_paint, LV_IMGBTN_STATE_PRESSED, NULL, &paint_icon,
+                    NULL);
+  lv_obj_set_size(btn_paint, 140, 140);
+  lv_obj_add_event_cb(btn_paint, app_paint_cb, LV_EVENT_CLICKED, NULL);
+
+  // Reuse press style from Pomodoro or create new
+  lv_obj_add_style(btn_paint, &style_pr_pomodoro, LV_STATE_PRESSED);
+
+  lv_obj_t *lbl_paint = lv_label_create(cont_paint);
+  lv_label_set_text(lbl_paint, "Liquid");
+  lv_obj_set_style_text_color(lbl_paint, lv_color_white(), 0);
+  lv_obj_set_style_text_font(lbl_paint, LV_FONT_DEFAULT, 0);
+  lv_obj_set_style_pad_top(lbl_paint, 10, 0);
 }
 
 static void create_brightness_view(void) {
@@ -1231,6 +1265,10 @@ static void show_brightness_panel(void) {
     lv_obj_add_flag(cont_settings_menu, LV_OBJ_FLAG_HIDDEN);
   if (cont_wifi)
     lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
+  if (cont_liquid_view) {
+    lv_obj_add_flag(cont_liquid_view, LV_OBJ_FLAG_HIDDEN);
+    ui_liquid_hide();
+  }
   if (cont_brightness) {
     lv_obj_clear_flag(cont_brightness, LV_OBJ_FLAG_HIDDEN);
     animate_brightness_view();
@@ -1246,6 +1284,10 @@ static void show_bluetooth_panel(void) {
     lv_obj_add_flag(cont_brightness, LV_OBJ_FLAG_HIDDEN);
   if (cont_wifi)
     lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
+  if (cont_liquid_view) {
+    lv_obj_add_flag(cont_liquid_view, LV_OBJ_FLAG_HIDDEN);
+    ui_liquid_hide();
+  }
   if (cont_bluetooth)
     lv_obj_clear_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1259,6 +1301,10 @@ static void show_wifi_panel(void) {
     lv_obj_add_flag(cont_brightness, LV_OBJ_FLAG_HIDDEN);
   if (cont_bluetooth)
     lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
+  if (cont_liquid_view) {
+    lv_obj_add_flag(cont_liquid_view, LV_OBJ_FLAG_HIDDEN);
+    ui_liquid_hide();
+  }
   if (cont_wifi)
     lv_obj_clear_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1272,8 +1318,30 @@ static void show_settings_menu(void) {
     lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
   if (cont_bluetooth)
     lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
+  if (cont_liquid_view) {
+    lv_obj_add_flag(cont_liquid_view, LV_OBJ_FLAG_HIDDEN);
+    ui_liquid_hide();
+  }
   if (cont_settings_menu)
     lv_obj_clear_flag(cont_settings_menu, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void show_liquid_panel(void) {
+  if (cont_launcher)
+    lv_obj_add_flag(cont_launcher, LV_OBJ_FLAG_HIDDEN);
+  if (cont_settings_menu)
+    lv_obj_add_flag(cont_settings_menu, LV_OBJ_FLAG_HIDDEN);
+  if (cont_brightness)
+    lv_obj_add_flag(cont_brightness, LV_OBJ_FLAG_HIDDEN);
+  if (cont_wifi)
+    lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
+  if (cont_bluetooth)
+    lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
+
+  if (cont_liquid_view) {
+    lv_obj_clear_flag(cont_liquid_view, LV_OBJ_FLAG_HIDDEN);
+    ui_liquid_show(cont_liquid_view);
+  }
 }
 
 static void show_launcher_panel(void) {
@@ -1287,6 +1355,10 @@ static void show_launcher_panel(void) {
     lv_obj_add_flag(cont_wifi, LV_OBJ_FLAG_HIDDEN);
   if (cont_bluetooth)
     lv_obj_add_flag(cont_bluetooth, LV_OBJ_FLAG_HIDDEN);
+  if (cont_liquid_view) {
+    lv_obj_add_flag(cont_liquid_view, LV_OBJ_FLAG_HIDDEN);
+    ui_liquid_hide();
+  }
   if (cont_launcher)
     lv_obj_clear_flag(cont_launcher, LV_OBJ_FLAG_HIDDEN);
 }
@@ -1921,6 +1993,7 @@ static void create_bluetooth_view(void) {
   lv_obj_set_style_text_color(bt_lbl_status, col_red, 0);
 
   // --- Available Devices Section ---
+  // --- Available Devices Section ---
   lv_obj_t *lbl_avail = lv_label_create(cont_bluetooth);
   lv_label_set_text(lbl_avail, "Available Devices");
   lv_obj_align(lbl_avail, LV_ALIGN_TOP_LEFT, 55, 190);
@@ -1942,6 +2015,35 @@ static void create_bluetooth_view(void) {
   lv_label_set_text(lbl_placeholder, "Tap switch to scan...");
   lv_obj_set_style_text_font(lbl_placeholder, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(lbl_placeholder, col_ink, 0);
+}
+
+// -----------------------------------------------------------------------------
+// Liquid View (Physics Animation)
+// -----------------------------------------------------------------------------
+static void create_liquid_view(void) {
+  if (cont_liquid_view)
+    return;
+
+  cont_liquid_view = lv_obj_create(scr_settings);
+  lv_obj_set_size(cont_liquid_view, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(cont_liquid_view, lv_color_black(), 0);
+  lv_obj_set_style_border_width(cont_liquid_view, 0, 0);
+  lv_obj_add_flag(cont_liquid_view, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(cont_liquid_view, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Back Button (Always on top)
+  lv_obj_t *btn_back = lv_btn_create(cont_liquid_view);
+  lv_obj_set_size(btn_back, 80, 50);
+  lv_obj_align(btn_back, LV_ALIGN_TOP_MID, 0, 20);
+  lv_obj_set_style_radius(btn_back, 10, 0);
+  lv_obj_set_style_bg_color(btn_back, lv_color_hex(0x2C2C2C), 0);
+  lv_obj_set_style_bg_opa(btn_back, LV_OPA_50, 0);
+  lv_obj_add_event_cb(btn_back, back_to_launcher_cb, LV_EVENT_CLICKED, NULL);
+
+  lv_obj_t *lbl_back = lv_label_create(btn_back);
+  lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " Back");
+  lv_obj_center(lbl_back);
+  lv_obj_set_style_text_color(lbl_back, lv_color_white(), 0);
 }
 
 // -----------------------------------------------------------------------------
@@ -1986,6 +2088,7 @@ void ui_settings_init(void) {
   create_wifi_view();
   create_bluetooth_view();
   create_pomodoro_view();
+  create_liquid_view();
 
   // Create global WiFi indicator (always on top)
   create_global_wifi_indicator();

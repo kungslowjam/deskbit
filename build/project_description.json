@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "example_qspi_with_ram",
-    "project_version":    "cd98e33-dirty",
+    "project_version":    "8df96a3-dirty",
     "project_path":       "C:/Users/hello/Desktop/deskbit",
     "idf_path":           "C:/Users/hello/esp/v5.5.2/esp-idf",
     "build_dir":          "C:/Users/hello/Desktop/deskbit/build",
@@ -1780,7 +1780,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "C:/Users/hello/Desktop/deskbit/build/esp-idf/user_app/libuser_app.a",
-            "sources": [ "C:/Users/hello/Desktop/deskbit/components/user_app/sensor_logic.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_presets.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_manager_example.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_registry.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_manager.c", "C:/Users/hello/Desktop/deskbit/components/user_app/user_app.c", "C:/Users/hello/Desktop/deskbit/components/user_app/ui_robo_eyes.c", "C:/Users/hello/Desktop/deskbit/components/user_app/ui_settings.c", "C:/Users/hello/Desktop/deskbit/components/user_app/settings_icon.c", "C:/Users/hello/Desktop/deskbit/components/user_app/deskbot_icon.c", "C:/Users/hello/Desktop/deskbit/components/user_app/pomodoro_icon.c", "C:/Users/hello/Desktop/deskbit/components/user_app/magic_book.c", "C:/Users/hello/Desktop/deskbit/components/user_app/book_anim.c", "C:/Users/hello/Desktop/deskbit/components/user_app/pomo_gif.c", "C:/Users/hello/Desktop/deskbit/components/user_app/ui_custom_anim.c", "C:/Users/hello/Desktop/deskbit/components/user_app/animations/angry_anim.c", "C:/Users/hello/Desktop/deskbit/components/user_app/animations/dizzy_anim.c" ],
+            "sources": [ "C:/Users/hello/Desktop/deskbit/components/user_app/ui_liquid.c", "C:/Users/hello/Desktop/deskbit/components/user_app/sensor_logic.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_presets.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_manager_example.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_registry.c", "C:/Users/hello/Desktop/deskbit/components/user_app/anim_manager.c", "C:/Users/hello/Desktop/deskbit/components/user_app/user_app.c", "C:/Users/hello/Desktop/deskbit/components/user_app/ui_robo_eyes.c", "C:/Users/hello/Desktop/deskbit/components/user_app/ui_settings.c", "C:/Users/hello/Desktop/deskbit/components/user_app/settings_icon.c", "C:/Users/hello/Desktop/deskbit/components/user_app/deskbot_icon.c", "C:/Users/hello/Desktop/deskbit/components/user_app/pomodoro_icon.c", "C:/Users/hello/Desktop/deskbit/components/user_app/paint_icon.c", "C:/Users/hello/Desktop/deskbit/components/user_app/magic_book.c", "C:/Users/hello/Desktop/deskbit/components/user_app/book_anim.c", "C:/Users/hello/Desktop/deskbit/components/user_app/pomo_gif.c", "C:/Users/hello/Desktop/deskbit/components/user_app/ui_custom_anim.c", "C:/Users/hello/Desktop/deskbit/components/user_app/animations/angry_anim.c", "C:/Users/hello/Desktop/deskbit/components/user_app/animations/dizzy_anim.c" ],
             "include_dirs": [ "./" ]
         },
         "vfs": {
